@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+.coverage
+.pytest_cache/
+# runtime data, keys and demo secrets - never commit
+data/
+certs/
+release/DEV_ONLY_release_private.key
