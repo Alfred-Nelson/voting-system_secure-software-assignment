@@ -37,3 +37,12 @@ def sha256_hex(data: bytes) -> str:
 def canonical_json(obj) -> bytes:
     """Deterministic JSON encoding - required before hashing or signing."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+
+
+# ---------------------------------------------------------------- AES-256-GCM
+def aes_encrypt(key: bytes, plaintext: bytes, aad: bytes = b"") -> bytes:
+    """Returns nonce(12) || ciphertext+tag."""
+    if len(key) != 32:
+        raise CryptoError("AES-256 requires a 32-byte key")
+    nonce = os.urandom(12)
+    return nonce + AESGCM(key).encrypt(nonce, plaintext, aad)
