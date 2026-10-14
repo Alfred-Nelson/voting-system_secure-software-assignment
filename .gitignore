@@ -7,3 +7,5 @@ __pycache__/
 data/
 certs/
 release/DEV_ONLY_release_private.key
+
+Architecture_Guide.md
