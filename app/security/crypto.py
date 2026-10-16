@@ -8,6 +8,7 @@ SR-10  Ballot signatures: ECDSA P-256 (the voter's anonymous credential key).
 """
 import base64
 import hashlib
+import hmac
 import json
 import os
 
@@ -56,3 +57,23 @@ def aes_decrypt(key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
         return AESGCM(key).decrypt(blob[:12], blob[12:], aad)
     except InvalidTag as exc:
         raise CryptoError("authentication tag mismatch - data was modified") from exc
+
+
+# ---------------------------------------------------------------- PII at rest (SR-06)
+class FieldCipher:
+    """Encrypts individual database fields. A separate HMAC key produces a
+    deterministic 'blind index' so records can be looked up without
+    decrypting the whole table."""
+
+    def __init__(self, enc_key: bytes, index_key: bytes):
+        self._enc_key = enc_key
+        self._index_key = index_key
+
+    def encrypt(self, value: str, context: str) -> str:
+        return b64e(aes_encrypt(self._enc_key, value.encode(), context.encode()))
+
+    def decrypt(self, token: str, context: str) -> str:
+        return aes_decrypt(self._enc_key, b64d(token), context.encode()).decode()
+
+    def blind_index(self, value: str) -> str:
+        return hmac.new(self._index_key, value.strip().upper().encode(), hashlib.sha256).hexdigest()
