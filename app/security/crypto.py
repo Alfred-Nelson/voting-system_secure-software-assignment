@@ -117,3 +117,8 @@ def hybrid_decrypt(unwrap_fn, envelope: dict) -> bytes:
         return AESGCM(aes_key).decrypt(b64d(envelope["iv"]), b64d(envelope["ciphertext"]), None)
     except InvalidTag as exc:
         raise CryptoError("ballot ciphertext was modified") from exc
+
+
+def envelope_signing_bytes(envelope: dict) -> bytes:
+    """The exact bytes a ballot signature covers."""
+    return f"v1|{envelope['wrapped_key']}|{envelope['iv']}|{envelope['ciphertext']}".encode()
