@@ -107,3 +107,13 @@ def hybrid_encrypt(public_key, plaintext: bytes) -> dict:
         padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
     )
     return {"wrapped_key": b64e(wrapped), "iv": b64e(iv), "ciphertext": b64e(ct)}
+
+
+def hybrid_decrypt(unwrap_fn, envelope: dict) -> bytes:
+    """unwrap_fn performs the RSA-OAEP decryption inside the KeyManager so the
+    private key never leaves it (SR-26)."""
+    aes_key = unwrap_fn(b64d(envelope["wrapped_key"]))
+    try:
+        return AESGCM(aes_key).decrypt(b64d(envelope["iv"]), b64d(envelope["ciphertext"]), None)
+    except InvalidTag as exc:
+        raise CryptoError("ballot ciphertext was modified") from exc
