@@ -77,3 +77,18 @@ class FieldCipher:
 
     def blind_index(self, value: str) -> str:
         return hmac.new(self._index_key, value.strip().upper().encode(), hashlib.sha256).hexdigest()
+
+
+# ---------------------------------------------------------------- padding (SR-09)
+def pad_fixed(data: bytes, size: int) -> bytes:
+    """Length-prefixed padding to a fixed block size."""
+    if len(data) + 4 > size:
+        raise CryptoError("ballot too large for fixed-size envelope")
+    return len(data).to_bytes(4, "big") + data + os.urandom(size - 4 - len(data))
+
+
+def unpad_fixed(data: bytes) -> bytes:
+    n = int.from_bytes(data[:4], "big")
+    if n > len(data) - 4:
+        raise CryptoError("corrupt padding")
+    return data[4:4 + n]
