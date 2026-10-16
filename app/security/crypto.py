@@ -13,6 +13,8 @@ import json
 import os
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -92,3 +94,16 @@ def unpad_fixed(data: bytes) -> bytes:
     if n > len(data) - 4:
         raise CryptoError("corrupt padding")
     return data[4:4 + n]
+
+
+# ---------------------------------------------------------------- hybrid ballot encryption (SR-05)
+def hybrid_encrypt(public_key, plaintext: bytes) -> dict:
+    """Used by the Python reference client (the browser does the same with WebCrypto)."""
+    aes_key = AESGCM.generate_key(bit_length=256)
+    iv = os.urandom(12)
+    ct = AESGCM(aes_key).encrypt(iv, plaintext, None)
+    wrapped = public_key.encrypt(
+        aes_key,
+        padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+    )
+    return {"wrapped_key": b64e(wrapped), "iv": b64e(iv), "ciphertext": b64e(ct)}
