@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -46,3 +47,12 @@ def aes_encrypt(key: bytes, plaintext: bytes, aad: bytes = b"") -> bytes:
         raise CryptoError("AES-256 requires a 32-byte key")
     nonce = os.urandom(12)
     return nonce + AESGCM(key).encrypt(nonce, plaintext, aad)
+
+
+def aes_decrypt(key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
+    if len(blob) < 28:
+        raise CryptoError("ciphertext too short")
+    try:
+        return AESGCM(key).decrypt(blob[:12], blob[12:], aad)
+    except InvalidTag as exc:
+        raise CryptoError("authentication tag mismatch - data was modified") from exc
