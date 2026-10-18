@@ -15,3 +15,8 @@ def test_aes_gcm_roundtrip_and_tamper_detection():               # SR-05
         aes_decrypt(key, tampered, b"aad")
     with pytest.raises(CryptoError):
         aes_decrypt(key, blob, b"other-aad")
+
+
+def test_aes_rejects_short_keys():
+    with pytest.raises(CryptoError):
+        aes_encrypt(os.urandom(16), b"x")
