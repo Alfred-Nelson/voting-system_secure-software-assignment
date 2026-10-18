@@ -4,8 +4,8 @@ import os
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.security.crypto import (CryptoError, aes_decrypt, aes_encrypt, hybrid_decrypt,
-                                 hybrid_encrypt, pad_fixed, unpad_fixed)
+from app.security.crypto import (CryptoError, FieldCipher, aes_decrypt, aes_encrypt,
+                                 hybrid_decrypt, hybrid_encrypt, pad_fixed, unpad_fixed)
 
 
 def test_aes_gcm_roundtrip_and_tamper_detection():               # SR-05
@@ -41,3 +41,14 @@ def test_hybrid_encryption_roundtrip():                            # SR-05
                                                     algorithm=hashes.SHA256(), label=None))
     assert hybrid_decrypt(unwrap, env) == b"secret ballot"
     assert b"secret" not in env["ciphertext"].encode()
+
+
+def test_field_cipher_and_blind_index():                           # SR-06
+    fc = FieldCipher(os.urandom(32), os.urandom(32))
+    token = fc.encrypt("Aisha Rahman", "name")
+    assert "Aisha" not in token
+    assert fc.decrypt(token, "name") == "Aisha Rahman"
+    with pytest.raises(CryptoError):        # context binding: can't move a value to another column
+        fc.decrypt(token, "address")
+    assert fc.blind_index("nsw1000001") == fc.blind_index("NSW1000001 ")
+    assert fc.encrypt("x", "c") != fc.encrypt("x", "c")   # random nonce each time
