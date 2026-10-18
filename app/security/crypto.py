@@ -12,9 +12,9 @@ import hmac
 import json
 import os
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature, InvalidTag
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, padding, utils
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -122,3 +122,29 @@ def hybrid_decrypt(unwrap_fn, envelope: dict) -> bytes:
 def envelope_signing_bytes(envelope: dict) -> bytes:
     """The exact bytes a ballot signature covers."""
     return f"v1|{envelope['wrapped_key']}|{envelope['iv']}|{envelope['ciphertext']}".encode()
+
+
+# ---------------------------------------------------------------- ECDSA P-256 (SR-10)
+def load_spki(spki_der: bytes):
+    key = serialization.load_der_public_key(spki_der)
+    if not isinstance(key, ec.EllipticCurvePublicKey) or key.curve.name != "secp256r1":
+        raise CryptoError("credential must be an ECDSA P-256 public key")
+    return key
+
+
+def ecdsa_verify_raw(public_key, raw_sig: bytes, message: bytes) -> None:
+    """WebCrypto produces raw r||s signatures; convert to DER and verify."""
+    if len(raw_sig) != 64:
+        raise CryptoError("signature must be 64 bytes (r||s)")
+    der = utils.encode_dss_signature(int.from_bytes(raw_sig[:32], "big"),
+                                     int.from_bytes(raw_sig[32:], "big"))
+    try:
+        public_key.verify(der, message, ec.ECDSA(hashes.SHA256()))
+    except InvalidSignature as exc:
+        raise CryptoError("ballot signature invalid") from exc
+
+
+def ecdsa_sign_raw(private_key, message: bytes) -> bytes:
+    der = private_key.sign(message, ec.ECDSA(hashes.SHA256()))
+    r, s = utils.decode_dss_signature(der)
+    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
