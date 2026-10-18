@@ -148,3 +148,7 @@ def ecdsa_sign_raw(private_key, message: bytes) -> bytes:
     der = private_key.sign(message, ec.ECDSA(hashes.SHA256()))
     r, s = utils.decode_dss_signature(der)
     return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+
+def constant_time_equals(a: str, b: str) -> bool:
+    return hmac.compare_digest(a.encode(), b.encode())
