@@ -2,8 +2,10 @@
 import os
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.security.crypto import CryptoError, aes_decrypt, aes_encrypt, pad_fixed, unpad_fixed
+from app.security.crypto import (CryptoError, aes_decrypt, aes_encrypt, hybrid_decrypt,
+                                 hybrid_encrypt, pad_fixed, unpad_fixed)
 
 
 def test_aes_gcm_roundtrip_and_tamper_detection():               # SR-05
@@ -28,3 +30,14 @@ def test_fixed_size_padding_hides_length():                       # SR-09
     assert unpad_fixed(a) == b"{}" and unpad_fixed(b) == b"x" * 1500
     with pytest.raises(CryptoError):
         pad_fixed(b"x" * 2045, 2048)
+
+
+def test_hybrid_encryption_roundtrip():                            # SR-05
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    env = hybrid_encrypt(priv.public_key(), b"secret ballot")
+    unwrap = lambda w: priv.decrypt(w, padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),
+                                                    algorithm=hashes.SHA256(), label=None))
+    assert hybrid_decrypt(unwrap, env) == b"secret ballot"
+    assert b"secret" not in env["ciphertext"].encode()
