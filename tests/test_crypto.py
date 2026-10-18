@@ -2,10 +2,11 @@
 import os
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from app.security.crypto import (CryptoError, FieldCipher, aes_decrypt, aes_encrypt,
-                                 hybrid_decrypt, hybrid_encrypt, pad_fixed, unpad_fixed)
+                                 ecdsa_sign_raw, ecdsa_verify_raw, hybrid_decrypt, hybrid_encrypt,
+                                 pad_fixed, unpad_fixed)
 
 
 def test_aes_gcm_roundtrip_and_tamper_detection():               # SR-05
@@ -52,3 +53,11 @@ def test_field_cipher_and_blind_index():                           # SR-06
         fc.decrypt(token, "address")
     assert fc.blind_index("nsw1000001") == fc.blind_index("NSW1000001 ")
     assert fc.encrypt("x", "c") != fc.encrypt("x", "c")   # random nonce each time
+
+
+def test_ecdsa_raw_signatures():                                    # SR-10
+    key = ec.generate_private_key(ec.SECP256R1())
+    sig = ecdsa_sign_raw(key, b"envelope")
+    ecdsa_verify_raw(key.public_key(), sig, b"envelope")
+    with pytest.raises(CryptoError):
+        ecdsa_verify_raw(key.public_key(), sig, b"envelope2")
