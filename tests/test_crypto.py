@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from app.security import blind
+from app.security import passwords
 from app.security.crypto import (CryptoError, FieldCipher, aes_decrypt, aes_encrypt,
                                  ecdsa_sign_raw, ecdsa_verify_raw, hybrid_decrypt, hybrid_encrypt,
                                  pad_fixed, unpad_fixed)
@@ -79,3 +80,11 @@ def test_blind_signature_is_valid_and_unlinkable():                 # SR-07
     assert not blind.verify(m, sig + 1, n, e)
     # Two blindings of the same message look completely different to the signer
     assert blind.blind(m, n, e)[0] != blind.blind(m, n, e)[0]
+
+
+def test_password_hashing():
+    h = passwords.hash_password("correct horse")
+    assert h.startswith("scrypt$") and "correct" not in h
+    assert passwords.verify_password("correct horse", h)
+    assert not passwords.verify_password("wrong", h)
+    assert passwords.hash_password("same") != passwords.hash_password("same")  # salted
