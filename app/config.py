@@ -46,3 +46,11 @@ class Config:
     # --- Monitoring (SR-20) ---
     TERMINAL_OFFLINE_SEC = 60
     FAILED_LOGIN_ALERT_THRESHOLD = 3
+
+    # --- Overseas missions (SR-24) ---
+    MISSION_ALLOWED_NETWORKS = os.environ.get(
+        "EVOTE_MISSION_NETWORKS", "127.0.0.0/8,10.20.0.0/16"
+    ).split(",")
+
+    # --- Software integrity (SR-25) ---
+    REQUIRE_SIGNED_BUILD = os.environ.get("EVOTE_REQUIRE_SIGNED_BUILD", "0") == "1"
