@@ -48,4 +48,8 @@ def create_app(config_object=Config, data_dir=None):
     svc.monitor = Monitor(dbs, svc.audit, cfg)
     app.evote = svc
 
+    due = svc.keys.needs_rotation()
+    if due:
+        svc.monitor.alert("medium", "keys.rotation_due", f"Keys due for 90-day rotation: {due}")
+
     return app
