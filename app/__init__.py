@@ -34,6 +34,7 @@ def create_app(config_object=Config, data_dir=None):
     data_dir = Path(data_dir or cfg.DATA_DIR)
     app = Flask(__name__)
     app.config.from_object(cfg)
+    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024   # reject oversized requests early
 
     dbs = Databases(data_dir, cfg)
     svc = SimpleNamespace(cfg=cfg, dbs=dbs)
