@@ -20,8 +20,8 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 
 from .crypto import CryptoError, aes_decrypt, aes_encrypt, b64d, b64e
 
@@ -141,4 +141,31 @@ class KeyManager:
                         "current_version": entry["current"], "created": cur["created"],
                         "rotatable": purpose in ROTATABLE})
         return out
+
+    # ------------------------------------------------------------ operations
+    def blind_public(self):
+        pub = self._private("blind")[0].public_key().public_numbers()
+        return pub.n, pub.e
+
+    def blind_sign(self, blinded: int) -> int:
+        priv = self._private("blind")[0]
+        n = priv.public_key().public_numbers().n
+        if not 0 < blinded < n:
+            raise CryptoError("blinded value out of range")
+        return pow(blinded, priv.private_numbers().d, n)
+
+    def ballot_public_pem(self) -> str:
+        return self._private("ballot_enc")[0].public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+    def ballot_public_key(self):
+        return self._private("ballot_enc")[0].public_key()
+
+    def unwrap_ballot_key(self, wrapped: bytes) -> bytes:
+        try:
+            return self._private("ballot_enc")[0].decrypt(
+                wrapped, padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),
+                                      algorithm=hashes.SHA256(), label=None))
+        except ValueError as exc:
+            raise CryptoError("ballot key unwrap failed") from exc
 
