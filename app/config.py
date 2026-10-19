@@ -18,3 +18,9 @@ class Config:
     BALLOT_DB = "ballot.db"
     AUDIT_DB = "audit.db"
     KEYSTORE_FILE = "keystore.json.enc"
+
+    # --- Key management (SR-26) ---
+    # In production the master key lives inside an HSM. Here it comes from the
+    # environment so it is never written to the repository.
+    MASTER_KEY_HEX = os.environ.get("EVOTE_MASTER_KEY")  # 64 hex chars = 256 bits
+    KEY_ROTATION_DAYS = 90
