@@ -15,6 +15,7 @@ deliberately NOT rotated during an election because every issued credential
 and every encrypted ballot depends on them.
 """
 
+ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
     "blind": "rsa",          # SR-07 blind signatures
     "ballot_enc": "rsa",     # SR-05 ballot decryption (RSA-OAEP unwrap)
