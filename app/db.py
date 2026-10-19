@@ -8,6 +8,11 @@ never a voter id, so no join between them is possible.
 SR-11 / SR-19: the ledger and audit tables are append-only - SQL triggers
 abort any UPDATE or DELETE, and both are hash-chained so tampering that
 bypasses the triggers (e.g. editing the file directly) is still detected.
+
+Usage: Databases(data_dir, cfg) creates the three files. connect(name) gives a
+row-factory connection (foreign keys on, WAL); transaction(name) wraps it in
+BEGIN IMMEDIATE so check-then-update steps are atomic. Code must never query
+across the identity and ballot databases.
 """
 import sqlite3
 from contextlib import contextmanager
