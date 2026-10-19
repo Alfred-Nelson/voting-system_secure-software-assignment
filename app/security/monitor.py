@@ -22,3 +22,14 @@ class Monitor:
                          (ts, severity, kind, message))
         self.audit.record("alert.raised", details={"severity": severity, "kind": kind,
                                                    "message": message})
+
+    def alerts(self, include_ack=False):
+        sql = ("SELECT * FROM alerts ORDER BY id DESC LIMIT 200" if include_ack else
+               "SELECT * FROM alerts WHERE acknowledged = 0 ORDER BY id DESC LIMIT 200")
+        with self.dbs.connect("audit") as conn:
+            return [dict(r) for r in conn.execute(sql)]
+
+    def acknowledge(self, alert_id, actor):
+        with self.dbs.connect("audit") as conn:
+            conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        self.audit.record("alert.acknowledged", actor, "staff", {"alert_id": alert_id})
