@@ -58,10 +58,12 @@ def aes_decrypt(key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
     try:
         return AESGCM(key).decrypt(blob[:12], blob[12:], aad)
     except InvalidTag as exc:
-        raise CryptoError("authentication tag mismatch - data was modified") from exc
+        raise CryptoError(
+            "authentication tag mismatch - data was modified"
+        ) from exc
 
 
-# ---------------------------------------------------------------- PII at rest (SR-06)
+# ------------------------------ PII at rest (SR-06)
 class FieldCipher:
     """Encrypts individual database fields. A separate HMAC key produces a
     deterministic 'blind index' so records can be looked up without
@@ -72,21 +74,33 @@ class FieldCipher:
         self._index_key = index_key
 
     def encrypt(self, value: str, context: str) -> str:
-        return b64e(aes_encrypt(self._enc_key, value.encode(), context.encode()))
+        return b64e(
+            aes_encrypt(self._enc_key, value.encode(), context.encode())
+        )
 
     def decrypt(self, token: str, context: str) -> str:
-        return aes_decrypt(self._enc_key, b64d(token), context.encode()).decode()
+        return aes_decrypt(
+            self._enc_key, b64d(token), context.encode()
+        ).decode()
 
     def blind_index(self, value: str) -> str:
-        return hmac.new(self._index_key, value.strip().upper().encode(), hashlib.sha256).hexdigest()
+        return hmac.new(
+            self._index_key,
+            value.strip().upper().encode(),
+            hashlib.sha256,
+        ).hexdigest()
 
 
-# ---------------------------------------------------------------- padding (SR-09)
+# ------------------------------ padding (SR-09)
 def pad_fixed(data: bytes, size: int) -> bytes:
     """Length-prefixed padding to a fixed block size."""
     if len(data) + 4 > size:
         raise CryptoError("ballot too large for fixed-size envelope")
-    return len(data).to_bytes(4, "big") + data + os.urandom(size - 4 - len(data))
+    return (
+        len(data).to_bytes(4, "big")
+        + data
+        + os.urandom(size - 4 - len(data))
+    )
 
 
 def unpad_fixed(data: bytes) -> bytes:
@@ -96,17 +110,26 @@ def unpad_fixed(data: bytes) -> bytes:
     return data[4:4 + n]
 
 
-# ---------------------------------------------------------------- hybrid ballot encryption (SR-05)
+# ------------------------------ hybrid ballot encryption (SR-05)
 def hybrid_encrypt(public_key, plaintext: bytes) -> dict:
-    """Used by the Python reference client (the browser does the same with WebCrypto)."""
+    """Used by the Python reference client (the browser does the same with
+    WebCrypto)."""
     aes_key = AESGCM.generate_key(bit_length=256)
     iv = os.urandom(12)
     ct = AESGCM(aes_key).encrypt(iv, plaintext, None)
     wrapped = public_key.encrypt(
         aes_key,
-        padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+        padding.OAEP(
+            mgf=padding.MGF1(hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
     )
-    return {"wrapped_key": b64e(wrapped), "iv": b64e(iv), "ciphertext": b64e(ct)}
+    return {
+        "wrapped_key": b64e(wrapped),
+        "iv": b64e(iv),
+        "ciphertext": b64e(ct),
+    }
 
 
 def hybrid_decrypt(unwrap_fn, envelope: dict) -> bytes:
@@ -114,11 +137,18 @@ def hybrid_decrypt(unwrap_fn, envelope: dict) -> bytes:
     private key never leaves it (SR-26)."""
     aes_key = unwrap_fn(b64d(envelope["wrapped_key"]))
     try:
-        return AESGCM(aes_key).decrypt(b64d(envelope["iv"]), b64d(envelope["ciphertext"]), None)
+        return AESGCM(aes_key).decrypt(
+            b64d(envelope["iv"]),
+            b64d(envelope["ciphertext"]),
+            None,
+        )
     except InvalidTag as exc:
         raise CryptoError("ballot ciphertext was modified") from exc
 
 
 def envelope_signing_bytes(envelope: dict) -> bytes:
     """The exact bytes a ballot signature covers."""
-    return f"v1|{envelope['wrapped_key']}|{envelope['iv']}|{envelope['ciphertext']}".encode()
+    return (
+        f"v1|{envelope['wrapped_key']}|{envelope['iv']}|"
+        f"{envelope['ciphertext']}"
+    ).encode()
