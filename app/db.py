@@ -102,5 +102,35 @@ CREATE TABLE IF NOT EXISTS ballots (
     superseded INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_ballots_cred ON ballots(credential_hash);
+-- SR-09 mixing pool: accepted ballots wait here until a batch is full, then the
+-- batch is shuffled before it enters the ballot store and ledger, so storage
+-- and ledger order no longer follow submission order.
+CREATE TABLE IF NOT EXISTS ballot_pool (
+    id TEXT PRIMARY KEY,
+    credential_hash TEXT NOT NULL,
+    envelope TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    ballot_hash TEXT NOT NULL,
+    superseded INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS ledger (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,              -- 'ballot' | 'batch'
+    item_hash TEXT NOT NULL,
+    prev_hash TEXT NOT NULL,
+    entry_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS receipts (
+    code TEXT PRIMARY KEY,
+    issued_hour TEXT NOT NULL,       -- coarse timestamp only (SR-09 vs SR-15)
+    key_version INTEGER NOT NULL,
+    signature TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload TEXT NOT NULL,
+    key_version INTEGER NOT NULL,
+    signature TEXT NOT NULL
+);
 """
 
