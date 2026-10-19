@@ -14,6 +14,8 @@ Election-scoped keys (the blind-signing key and the ballot decryption key) are
 deliberately NOT rotated during an election because every issued credential
 and every encrypted ballot depends on them.
 """
+import hashlib
+import hmac
 import json
 import os
 import threading
@@ -23,7 +25,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 
-from .crypto import CryptoError, aes_decrypt, aes_encrypt, b64d, b64e
+from .crypto import CryptoError, FieldCipher, aes_decrypt, aes_encrypt, b64d, b64e
 
 ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
@@ -185,4 +187,26 @@ class KeyManager:
         priv, _ = self._private(purpose, version)
         return priv.public_key().public_bytes(
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+    def mac(self, message: bytes, version=None):
+        key, version = self._material("audit_hmac", version)
+        return version, hmac.new(key, message, hashlib.sha256).hexdigest()
+
+    def mac_verify(self, message: bytes, version, tag: str) -> bool:
+        try:
+            key, _ = self._material("audit_hmac", version)
+        except CryptoError:
+            return False
+        return hmac.compare_digest(hmac.new(key, message, hashlib.sha256).hexdigest(), tag)
+
+    def field_cipher(self) -> FieldCipher:
+        return FieldCipher(self._material("pii_enc")[0], self._material("pii_index")[0])
+
+    def backup_encrypt(self, data: bytes):
+        key, version = self._material("backup")
+        return version, aes_encrypt(key, data, b"evote-backup")
+
+    def backup_decrypt(self, version, blob: bytes) -> bytes:
+        key, _ = self._material("backup", version)
+        return aes_decrypt(key, blob, b"evote-backup")
 
