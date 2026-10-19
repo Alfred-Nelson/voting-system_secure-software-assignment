@@ -14,6 +14,10 @@ Election-scoped keys (the blind-signing key and the ballot decryption key) are
 deliberately NOT rotated during an election because every issued credential
 and every encrypted ballot depends on them.
 """
+import threading
+from pathlib import Path
+
+from .crypto import CryptoError
 
 ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
@@ -26,3 +30,26 @@ PURPOSES = {
     "pii_index": "secret",   # SR-06 blind index
     "backup": "secret",      # SR-23
 }
+
+
+class KeyManager:
+    def __init__(self, keystore_path: Path, master_key: bytes, rotation_days: int = 90,
+                 on_event=None):
+        if len(master_key) != 32:
+            raise CryptoError("master key must be 256 bits")
+        self._path = Path(keystore_path)
+        self._master = master_key
+        self._rotation_days = rotation_days
+        self._lock = threading.Lock()
+        self._on_event = on_event or (lambda *a, **k: None)
+        self._store = self._load() if self._path.exists() else {}
+        changed = False
+        for purpose in PURPOSES:
+            if purpose not in self._store:
+                self._store[purpose] = {"current": 0, "versions": []}
+                self._new_version(purpose)
+                changed = True
+        if changed:
+            self._save()
+        self._cache = {}
+
