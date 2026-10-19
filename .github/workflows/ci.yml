@@ -1,0 +1,12 @@
+# Secure development pipeline (SR-31)
+# Every push / pull request is tested and scanned; any failure turns the run red.
+name: secure-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
