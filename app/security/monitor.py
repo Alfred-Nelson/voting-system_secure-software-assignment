@@ -6,6 +6,7 @@ Raises alerts for:
   * election configuration changes and key rotations
   * polling terminals that miss heartbeats for more than 60 seconds
 """
+from datetime import datetime, timezone
 
 
 class Monitor:
@@ -13,3 +14,11 @@ class Monitor:
         self.dbs = dbs
         self.audit = audit
         self.cfg = cfg
+
+    def alert(self, severity, kind, message):
+        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self.dbs.connect("audit") as conn:
+            conn.execute("INSERT INTO alerts (ts, severity, kind, message) VALUES (?,?,?,?)",
+                         (ts, severity, kind, message))
+        self.audit.record("alert.raised", details={"severity": severity, "kind": kind,
+                                                   "message": message})
