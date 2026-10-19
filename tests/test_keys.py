@@ -28,3 +28,17 @@ def test_wrong_master_key_cannot_open_keystore(tmp_path):
 def test_keys_persist_across_restart(tmp_path):
     n1 = make(tmp_path).blind_public()[0]
     assert make(tmp_path).blind_public()[0] == n1
+
+
+def test_rotation_keeps_old_versions_verifiable(tmp_path):
+    events = []
+    km = KeyManager(tmp_path / "ks.enc", b"\x01" * 32, on_event=lambda *a: events.append(a))
+    v1, sig1 = km.sign("receipt_sign", b"receipt")
+    v2 = km.rotate("receipt_sign", "admin1")
+    assert v2 == v1 + 1
+    v, sig2 = km.sign("receipt_sign", b"receipt")
+    assert v == v2
+    assert km.verify("receipt_sign", v1, sig1, b"receipt")      # old signature still verifies
+    assert km.verify("receipt_sign", v2, sig2, b"receipt")
+    assert not km.verify("receipt_sign", v2, sig1, b"receipt")  # but with the right key only
+    assert events and events[0][0] == "key.rotated"             # rotation is audited
