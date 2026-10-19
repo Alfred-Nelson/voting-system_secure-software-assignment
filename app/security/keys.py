@@ -17,7 +17,7 @@ and every encrypted ballot depends on them.
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -122,4 +122,23 @@ class KeyManager:
         self._on_event("key.rotated", actor, {"purpose": purpose, "version": version,
                                                "reason": reason})
         return version
+
+    def needs_rotation(self, now=None):
+        now = now or _now()
+        due = []
+        for purpose in ROTATABLE:
+            entry = self._store[purpose]
+            created = datetime.fromisoformat(entry["versions"][entry["current"] - 1]["created"])
+            if now - created > timedelta(days=self._rotation_days):
+                due.append(purpose)
+        return sorted(due)
+
+    def key_status(self):
+        out = []
+        for purpose, entry in self._store.items():
+            cur = entry["versions"][entry["current"] - 1]
+            out.append({"purpose": purpose, "algorithm": PURPOSES[purpose],
+                        "current_version": entry["current"], "created": cur["created"],
+                        "rotatable": purpose in ROTATABLE})
+        return out
 
