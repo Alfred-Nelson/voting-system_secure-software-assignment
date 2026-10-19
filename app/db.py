@@ -29,4 +29,51 @@ CREATE TABLE IF NOT EXISTS voters (
     token_issued INTEGER NOT NULL DEFAULT 0,   -- online credential issued (SR-04)
     voted_channel TEXT                          -- 'station' / 'postal' (SR-04)
 );
+CREATE TABLE IF NOT EXISTS staff (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    role TEXT NOT NULL,
+    state TEXT,
+    password_hash TEXT NOT NULL,
+    totp_secret_enc TEXT NOT NULL,
+    failed_logins INTEGER NOT NULL DEFAULT 0,
+    locked_until REAL NOT NULL DEFAULT 0,
+    last_totp_counter INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    subject_type TEXT NOT NULL,
+    subject_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    role TEXT NOT NULL,
+    state TEXT,
+    created REAL NOT NULL,
+    last_active REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS terminals (
+    id TEXT PRIMARY KEY,
+    location TEXT NOT NULL,
+    last_heartbeat REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'unknown'
+);
+CREATE TABLE IF NOT EXISTS api_clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    key_hash TEXT UNIQUE NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approval_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,              -- 'exclude_candidate' | 'recount'
+    target TEXT,
+    reason TEXT NOT NULL,
+    requested_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approvals (
+    request_id INTEGER NOT NULL,
+    approver TEXT NOT NULL,
+    ts REAL NOT NULL,
+    PRIMARY KEY (request_id, approver)
+);
 """
