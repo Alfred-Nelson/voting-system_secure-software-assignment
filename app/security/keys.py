@@ -14,10 +14,12 @@ Election-scoped keys (the blind-signing key and the ballot decryption key) are
 deliberately NOT rotated during an election because every issued credential
 and every encrypted ballot depends on them.
 """
+import json
+import os
 import threading
 from pathlib import Path
 
-from .crypto import CryptoError
+from .crypto import CryptoError, aes_decrypt, aes_encrypt
 
 ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
@@ -52,4 +54,15 @@ class KeyManager:
         if changed:
             self._save()
         self._cache = {}
+
+    # ------------------------------------------------------------ persistence
+    def _load(self):
+        blob = self._path.read_bytes()
+        return json.loads(aes_decrypt(self._master, blob, b"evote-keystore"))
+
+    def _save(self):
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_bytes(aes_encrypt(self._master, json.dumps(self._store).encode(), b"evote-keystore"))
+        os.replace(tmp, self._path)
 
