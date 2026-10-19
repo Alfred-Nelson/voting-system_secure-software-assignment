@@ -41,3 +41,19 @@ class Monitor:
             cur = conn.execute("UPDATE terminals SET last_heartbeat = ?, status = 'online' "
                                "WHERE id = ?", (time.time(), terminal_id))
             return cur.rowcount == 1
+
+    def check_terminals(self, now=None):
+        """Called periodically. Marks terminals offline and raises one alert each."""
+        now = now or time.time()
+        offline = []
+        with self.dbs.connect("identity") as conn:
+            rows = conn.execute("SELECT * FROM terminals WHERE status = 'online' "
+                                "AND last_heartbeat < ?",
+                                (now - self.cfg.TERMINAL_OFFLINE_SEC,)).fetchall()
+            for r in rows:
+                conn.execute("UPDATE terminals SET status = 'offline' WHERE id = ?", (r["id"],))
+                offline.append(r["id"])
+        for tid in offline:
+            self.alert("critical", "terminal.offline",
+                       f"Terminal {tid} missed heartbeats - start paper-ballot procedure (SR-22)")
+        return offline
