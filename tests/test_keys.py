@@ -1,4 +1,7 @@
 """SR-26 key management."""
+import pytest
+
+from app.security.crypto import CryptoError
 from app.security.keys import KeyManager
 
 
@@ -14,3 +17,9 @@ def test_keystore_encrypted_at_rest(tmp_path):
     for entry in km._store.values():
         for version in entry["versions"]:
             assert version["material"].encode() not in raw
+
+
+def test_wrong_master_key_cannot_open_keystore(tmp_path):
+    make(tmp_path)
+    with pytest.raises(CryptoError):
+        make(tmp_path, b"\x02" * 32)
