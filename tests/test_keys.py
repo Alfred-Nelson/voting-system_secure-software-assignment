@@ -58,3 +58,10 @@ def test_election_scoped_keys_cannot_rotate_mid_election(tmp_path):
     for purpose in ("blind", "ballot_enc", "pii_enc"):
         with pytest.raises(CryptoError):
             km.rotate(purpose)
+
+
+def test_private_keys_never_exposed(tmp_path):
+    km = make(tmp_path)
+    public_api = [m for m in dir(km) if not m.startswith("_")]
+    assert not any("private" in m for m in public_api)
+    assert "PRIVATE" not in km.public_key_pem("results_sign")
