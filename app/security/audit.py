@@ -54,3 +54,9 @@ class AuditLog:
                             "reason": "MAC invalid (entry forged)"}
                 prev = row["entry_hash"]
         return {"ok": True, "entries": count, "first_bad_seq": None, "reason": "intact"}
+
+    def entries(self, limit=200):
+        with self.dbs.connect("audit") as conn:
+            rows = conn.execute("SELECT seq, ts, actor, role, action, details, entry_hash "
+                                "FROM audit_log ORDER BY seq DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
