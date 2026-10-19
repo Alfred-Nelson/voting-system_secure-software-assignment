@@ -5,7 +5,7 @@ import secrets
 from pathlib import Path
 from types import SimpleNamespace
 
-from flask import Flask, request
+from flask import Flask, jsonify, request
 
 from .config import Config
 from .db import Databases
@@ -66,5 +66,22 @@ def create_app(config_object=Config, data_dir=None):
         if request.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
+
+    @app.errorhandler(404)
+    def not_found(_):
+        return jsonify(error="not found"), 404
+
+    @app.errorhandler(405)
+    def bad_method(_):
+        return jsonify(error="method not allowed"), 405
+
+    @app.errorhandler(413)
+    def too_large(_):
+        return jsonify(error="request too large"), 413
+
+    @app.errorhandler(500)
+    def server_error(_):
+        # never leak stack traces to clients
+        return jsonify(error="internal error"), 500
 
     return app
