@@ -6,6 +6,7 @@ Raises alerts for:
   * election configuration changes and key rotations
   * polling terminals that miss heartbeats for more than 60 seconds
 """
+import time
 from datetime import datetime, timezone
 
 
@@ -33,3 +34,10 @@ class Monitor:
         with self.dbs.connect("audit") as conn:
             conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
         self.audit.record("alert.acknowledged", actor, "staff", {"alert_id": alert_id})
+
+    # ---- terminals
+    def heartbeat(self, terminal_id):
+        with self.dbs.connect("identity") as conn:
+            cur = conn.execute("UPDATE terminals SET last_heartbeat = ?, status = 'online' "
+                               "WHERE id = ?", (time.time(), terminal_id))
+            return cur.rowcount == 1
