@@ -77,3 +77,29 @@ CREATE TABLE IF NOT EXISTS approvals (
     PRIMARY KEY (request_id, approver)
 );
 """
+
+BALLOT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS election (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS groups (
+    code TEXT PRIMARY KEY, name TEXT NOT NULL, position INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS candidates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    party TEXT NOT NULL,
+    group_code TEXT,
+    position INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    excluded INTEGER NOT NULL DEFAULT 0
+);
+-- No voter id, no timestamp, random primary key (SR-07, SR-09)
+CREATE TABLE IF NOT EXISTS ballots (
+    id TEXT PRIMARY KEY,
+    credential_hash TEXT NOT NULL,
+    envelope TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    ballot_hash TEXT NOT NULL,
+    superseded INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_ballots_cred ON ballots(credential_hash);
+"""
