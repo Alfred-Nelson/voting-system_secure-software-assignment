@@ -120,6 +120,10 @@ CREATE TABLE IF NOT EXISTS ledger (
     prev_hash TEXT NOT NULL,
     entry_hash TEXT NOT NULL
 );
+CREATE TRIGGER IF NOT EXISTS ledger_no_update BEFORE UPDATE ON ledger
+BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS ledger_no_delete BEFORE DELETE ON ledger
+BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
 CREATE TABLE IF NOT EXISTS receipts (
     code TEXT PRIMARY KEY,
     issued_hour TEXT NOT NULL,       -- coarse timestamp only (SR-09 vs SR-15)
