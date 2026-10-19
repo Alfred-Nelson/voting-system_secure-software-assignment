@@ -1,4 +1,6 @@
 """SR-26 key management."""
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.security.crypto import CryptoError
@@ -42,3 +44,10 @@ def test_rotation_keeps_old_versions_verifiable(tmp_path):
     assert km.verify("receipt_sign", v2, sig2, b"receipt")
     assert not km.verify("receipt_sign", v2, sig1, b"receipt")  # but with the right key only
     assert events and events[0][0] == "key.rotated"             # rotation is audited
+
+
+def test_rotation_due_after_90_days(tmp_path):
+    km = make(tmp_path)
+    assert km.needs_rotation() == []
+    later = datetime.now(timezone.utc) + timedelta(days=91)
+    assert set(km.needs_rotation(later)) == {"results_sign", "receipt_sign", "audit_hmac", "backup"}
