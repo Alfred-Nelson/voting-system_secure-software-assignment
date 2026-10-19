@@ -194,3 +194,16 @@ class Databases:
             yield conn
         finally:
             conn.close()
+
+    @contextmanager
+    def transaction(self, name):
+        """BEGIN IMMEDIATE takes the write lock up front, which makes
+        check-then-update sequences (e.g. double-vote checks) atomic."""
+        with self.connect(name) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
