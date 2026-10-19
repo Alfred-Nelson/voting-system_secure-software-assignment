@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     mac_version INTEGER NOT NULL,
     mac TEXT NOT NULL
 );
+-- SR-19: the audit log is append-only; the database itself rejects UPDATE and DELETE
 CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
