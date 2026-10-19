@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from app.security import blind
-from app.security import passwords
+from app.security import passwords, totp
 from app.security.crypto import (CryptoError, FieldCipher, aes_decrypt, aes_encrypt,
                                  ecdsa_sign_raw, ecdsa_verify_raw, hybrid_decrypt, hybrid_encrypt,
                                  pad_fixed, unpad_fixed)
@@ -88,3 +88,12 @@ def test_password_hashing():
     assert passwords.verify_password("correct horse", h)
     assert not passwords.verify_password("wrong", h)
     assert passwords.hash_password("same") != passwords.hash_password("same")  # salted
+
+
+def test_totp_rfc6238_vector_and_replay_window():                  # SR-01
+    import base64
+    secret = base64.b32encode(b"12345678901234567890").decode()
+    assert totp.now_code(secret, at=59) == "287082"           # RFC 6238 Appendix B (6 digits)
+    assert totp.verify(secret, "287082", at=59) == 1
+    assert totp.verify(secret, "287082", at=59 + 90) is None  # too old
+    assert totp.verify(secret, "abc", at=59) is None
