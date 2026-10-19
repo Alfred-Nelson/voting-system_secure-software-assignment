@@ -169,3 +169,20 @@ class KeyManager:
         except ValueError as exc:
             raise CryptoError("ballot key unwrap failed") from exc
 
+    def sign(self, purpose, message: bytes):
+        priv, version = self._private(purpose)
+        return version, b64e(priv.sign(message))
+
+    def verify(self, purpose, version, signature_b64, message: bytes) -> bool:
+        try:
+            priv, _ = self._private(purpose, version)
+            priv.public_key().verify(b64d(signature_b64), message)
+            return True
+        except Exception:
+            return False
+
+    def public_key_pem(self, purpose, version=None) -> str:
+        priv, _ = self._private(purpose, version)
+        return priv.public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
