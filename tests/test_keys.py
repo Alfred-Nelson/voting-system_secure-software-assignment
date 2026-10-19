@@ -51,3 +51,10 @@ def test_rotation_due_after_90_days(tmp_path):
     assert km.needs_rotation() == []
     later = datetime.now(timezone.utc) + timedelta(days=91)
     assert set(km.needs_rotation(later)) == {"results_sign", "receipt_sign", "audit_hmac", "backup"}
+
+
+def test_election_scoped_keys_cannot_rotate_mid_election(tmp_path):
+    km = make(tmp_path)
+    for purpose in ("blind", "ballot_enc", "pii_enc"):
+        with pytest.raises(CryptoError):
+            km.rotate(purpose)
