@@ -23,7 +23,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
 
-from .crypto import CryptoError, aes_decrypt, aes_encrypt, b64e
+from .crypto import CryptoError, aes_decrypt, aes_encrypt, b64d, b64e
 
 ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
@@ -93,4 +93,22 @@ class KeyManager:
                                   "material": b64e(material)})
         entry["current"] = version
         return version
+
+    def _material(self, purpose, version=None):
+        entry = self._store[purpose]
+        version = version or entry["current"]
+        for v in entry["versions"]:
+            if v["version"] == version:
+                return b64d(v["material"]), version
+        raise CryptoError(f"unknown key version {purpose} v{version}")
+
+    def _private(self, purpose, version=None):
+        material, version = self._material(purpose, version)
+        cache_key = (purpose, version)
+        if cache_key not in self._cache:
+            if PURPOSES[purpose] == "rsa":
+                self._cache[cache_key] = serialization.load_der_private_key(material, None)
+            else:
+                self._cache[cache_key] = ed25519.Ed25519PrivateKey.from_private_bytes(material)
+        return self._cache[cache_key], version
 
