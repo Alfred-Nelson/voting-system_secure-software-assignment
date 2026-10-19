@@ -112,3 +112,14 @@ class KeyManager:
                 self._cache[cache_key] = ed25519.Ed25519PrivateKey.from_private_bytes(material)
         return self._cache[cache_key], version
 
+    # ------------------------------------------------------------ rotation
+    def rotate(self, purpose, actor="system", reason="scheduled"):
+        if purpose not in ROTATABLE:
+            raise CryptoError(f"{purpose} is election-scoped and cannot be rotated mid-election")
+        with self._lock:
+            version = self._new_version(purpose)
+            self._save()
+        self._on_event("key.rotated", actor, {"purpose": purpose, "version": version,
+                                               "reason": reason})
+        return version
+
