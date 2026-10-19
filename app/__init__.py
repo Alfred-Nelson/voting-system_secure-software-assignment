@@ -37,9 +37,13 @@ def create_app(config_object=Config, data_dir=None):
 
     dbs = Databases(data_dir, cfg)
     svc = SimpleNamespace(cfg=cfg, dbs=dbs)
+    # Audit log needs the key manager and vice versa (key rotation is audited).
+    holder = {}
     svc.keys = KeyManager(data_dir / cfg.KEYSTORE_FILE, _master_key(cfg, data_dir),
-                          cfg.KEY_ROTATION_DAYS)
-    svc.audit = AuditLog(dbs, svc.keys)
+                          cfg.KEY_ROTATION_DAYS,
+                          on_event=lambda action, actor, details: holder["audit"].record(
+                              action, actor, "admin", details))
+    svc.audit = holder["audit"] = AuditLog(dbs, svc.keys)
     svc.monitor = Monitor(dbs, svc.audit, cfg)
     app.evote = svc
 
