@@ -60,3 +60,10 @@ class Config:
     VACANCIES = 2
 
     TESTING = False
+
+
+class TestConfig(Config):
+    TESTING = True
+    MIX_BATCH_SIZE = 1
+    LOGIN_LIMIT_PER_MIN = 1000
+    BALLOT_LIMIT_PER_MIN = 1000
