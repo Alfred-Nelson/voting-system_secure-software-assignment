@@ -37,3 +37,8 @@ class Config:
     BALLOT_PAD_BYTES = 2048          # every plaintext ballot padded to this size
     LEDGER_BATCH_SIZE = 1000         # SR-11 batch checksum interval
     MIX_BATCH_SIZE = 10              # SR-09 ballots shuffled in batches of this size
+
+    # --- Rate limiting (SR-14, SR-21) ---
+    RESULTS_API_LIMIT_PER_MIN = 100
+    LOGIN_LIMIT_PER_MIN = 20
+    BALLOT_LIMIT_PER_MIN = 60
