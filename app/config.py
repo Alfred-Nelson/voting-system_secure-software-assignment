@@ -54,3 +54,9 @@ class Config:
 
     # --- Software integrity (SR-25) ---
     REQUIRE_SIGNED_BUILD = os.environ.get("EVOTE_REQUIRE_SIGNED_BUILD", "0") == "1"
+
+    # --- Election ---
+    ELECTION_STATE = "NSW"
+    VACANCIES = 2
+
+    TESTING = False
