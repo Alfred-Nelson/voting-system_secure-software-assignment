@@ -1,4 +1,14 @@
-"""Tamper-evident audit logging (SR-18, SR-19)."""
+"""Tamper-evident audit logging (SR-18, SR-19).
+
+Every entry records who, when, what and before/after values. Entries are
+hash-chained (each entry hash covers the previous one) and each entry carries
+an HMAC-SHA256 tag produced inside the KeyManager. Editing, deleting or
+re-ordering any entry breaks verification. The table itself refuses UPDATE and
+DELETE (SQL triggers in db.py).
+
+Ballot contents and anything that could link a voter to a ballot are never
+written to the audit log (SR-07).
+"""
 import hashlib
 import json
 import threading
