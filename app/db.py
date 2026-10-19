@@ -9,6 +9,8 @@ SR-11 / SR-19: the ledger and audit tables are append-only - SQL triggers
 abort any UPDATE or DELETE, and both are hash-chained so tampering that
 bypasses the triggers (e.g. editing the file directly) is still detected.
 """
+import sqlite3
+from pathlib import Path
 
 IDENTITY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS voters (
@@ -165,3 +167,21 @@ CREATE TABLE IF NOT EXISTS alerts (
     acknowledged INTEGER NOT NULL DEFAULT 0
 );
 """
+
+
+class Databases:
+    def __init__(self, data_dir: Path, cfg):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.paths = {
+            "identity": self.data_dir / cfg.IDENTITY_DB,
+            "ballot": self.data_dir / cfg.BALLOT_DB,
+            "audit": self.data_dir / cfg.AUDIT_DB,
+        }
+        for name, schema in (("identity", IDENTITY_SCHEMA), ("ballot", BALLOT_SCHEMA),
+                             ("audit", AUDIT_SCHEMA)):
+            conn = sqlite3.connect(self.paths[name])
+            try:
+                conn.executescript(schema)
+            finally:
+                conn.close()
