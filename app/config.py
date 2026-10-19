@@ -32,3 +32,8 @@ class Config:
     VOTER_IDLE_TIMEOUT_SEC = 600        # voters get 10 minutes to fill in a ballot
     TOTP_STEP_SEC = 30
     TOTP_DIGITS = 6
+
+    # --- Ballot handling (SR-05, SR-09) ---
+    BALLOT_PAD_BYTES = 2048          # every plaintext ballot padded to this size
+    LEDGER_BATCH_SIZE = 1000         # SR-11 batch checksum interval
+    MIX_BATCH_SIZE = 10              # SR-09 ballots shuffled in batches of this size
