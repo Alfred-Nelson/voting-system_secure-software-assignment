@@ -24,3 +24,11 @@ class Config:
     # environment so it is never written to the repository.
     MASTER_KEY_HEX = os.environ.get("EVOTE_MASTER_KEY")  # 64 hex chars = 256 bits
     KEY_ROTATION_DAYS = 90
+
+    # --- Authentication (SR-01, SR-02) ---
+    MAX_FAILED_LOGINS = 5            # account locked after this many failures
+    LOCKOUT_MINUTES = 15
+    PRIVILEGED_IDLE_TIMEOUT_SEC = 180   # SR-02: 3 minutes for staff accounts
+    VOTER_IDLE_TIMEOUT_SEC = 600        # voters get 10 minutes to fill in a ballot
+    TOTP_STEP_SEC = 30
+    TOTP_DIGITS = 6
