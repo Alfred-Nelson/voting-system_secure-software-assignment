@@ -10,6 +10,7 @@ abort any UPDATE or DELETE, and both are hash-chained so tampering that
 bypasses the triggers (e.g. editing the file directly) is still detected.
 """
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 IDENTITY_SCHEMA = """
@@ -180,8 +181,16 @@ class Databases:
         }
         for name, schema in (("identity", IDENTITY_SCHEMA), ("ballot", BALLOT_SCHEMA),
                              ("audit", AUDIT_SCHEMA)):
-            conn = sqlite3.connect(self.paths[name])
-            try:
+            with self.connect(name) as conn:
                 conn.executescript(schema)
-            finally:
-                conn.close()
+
+    @contextmanager
+    def connect(self, name):
+        conn = sqlite3.connect(self.paths[name], timeout=10, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        try:
+            yield conn
+        finally:
+            conn.close()
