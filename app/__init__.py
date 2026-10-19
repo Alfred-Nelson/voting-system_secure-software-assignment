@@ -5,7 +5,7 @@ import secrets
 from pathlib import Path
 from types import SimpleNamespace
 
-from flask import Flask
+from flask import Flask, request
 
 from .config import Config
 from .db import Databases
@@ -51,5 +51,20 @@ def create_app(config_object=Config, data_dir=None):
     due = svc.keys.needs_rotation()
     if due:
         svc.monitor.alert("medium", "keys.rotation_due", f"Keys due for 90-day rotation: {due}")
+
+    @app.after_request
+    def security_headers(resp):
+        # SR-05 / general hardening
+        resp.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     return app
