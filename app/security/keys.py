@@ -17,9 +17,13 @@ and every encrypted ballot depends on them.
 import json
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
-from .crypto import CryptoError, aes_decrypt, aes_encrypt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
+
+from .crypto import CryptoError, aes_decrypt, aes_encrypt, b64e
 
 ROTATABLE = {"results_sign", "receipt_sign", "audit_hmac", "backup"}
 PURPOSES = {
@@ -32,6 +36,10 @@ PURPOSES = {
     "pii_index": "secret",   # SR-06 blind index
     "backup": "secret",      # SR-23
 }
+
+
+def _now():
+    return datetime.now(timezone.utc)
 
 
 class KeyManager:
@@ -65,4 +73,24 @@ class KeyManager:
         tmp = self._path.with_suffix(".tmp")
         tmp.write_bytes(aes_encrypt(self._master, json.dumps(self._store).encode(), b"evote-keystore"))
         os.replace(tmp, self._path)
+
+    def _new_version(self, purpose):
+        kind = PURPOSES[purpose]
+        if kind == "rsa":
+            priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            material = priv.private_bytes(serialization.Encoding.DER,
+                                          serialization.PrivateFormat.PKCS8,
+                                          serialization.NoEncryption())
+        elif kind == "ed25519":
+            material = ed25519.Ed25519PrivateKey.generate().private_bytes(
+                serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                serialization.NoEncryption())
+        else:
+            material = os.urandom(32)
+        entry = self._store[purpose]
+        version = len(entry["versions"]) + 1
+        entry["versions"].append({"version": version, "created": _now().isoformat(),
+                                  "material": b64e(material)})
+        entry["current"] = version
+        return version
 
