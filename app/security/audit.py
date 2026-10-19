@@ -33,3 +33,24 @@ class AuditLog:
                 " mac_version, mac) VALUES (?,?,?,?,?,?,?,?,?)",
                 (ts, actor, role, action, details_json, prev, entry_hash, mac_version, mac))
         return entry_hash
+
+    def verify_chain(self):
+        """Returns {'ok': bool, 'entries': n, 'first_bad_seq': seq|None, 'reason': str}"""
+        prev = GENESIS
+        count = 0
+        with self.dbs.connect("audit") as conn:
+            for row in conn.execute("SELECT * FROM audit_log ORDER BY seq"):
+                count += 1
+                if row["prev_hash"] != prev:
+                    return {"ok": False, "entries": count, "first_bad_seq": row["seq"],
+                            "reason": "chain broken (entry removed or re-ordered)"}
+                expected = self._entry_hash(prev, row["ts"], row["actor"], row["role"],
+                                            row["action"], row["details"])
+                if expected != row["entry_hash"]:
+                    return {"ok": False, "entries": count, "first_bad_seq": row["seq"],
+                            "reason": "entry content modified"}
+                if not self.keys.mac_verify(row["entry_hash"].encode(), row["mac_version"], row["mac"]):
+                    return {"ok": False, "entries": count, "first_bad_seq": row["seq"],
+                            "reason": "MAC invalid (entry forged)"}
+                prev = row["entry_hash"]
+        return {"ok": True, "entries": count, "first_bad_seq": None, "reason": "intact"}
