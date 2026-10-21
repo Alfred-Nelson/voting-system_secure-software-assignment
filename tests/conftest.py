@@ -29,3 +29,8 @@ def svc(app):
 @pytest.fixture
 def creds(svc):
     return seed(svc)
+
+
+@pytest.fixture
+def http(app):
+    return app.test_client()
