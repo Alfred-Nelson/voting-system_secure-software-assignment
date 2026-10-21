@@ -15,3 +15,9 @@ def test_session_tokens_stored_hashed(tmp_path):
     with dbs.connect("identity") as c:
         stored = [r[0] for r in c.execute("SELECT token_hash FROM sessions")]
     assert token not in stored and len(stored[0]) == 64
+
+
+def test_voter_idle_timeout_is_longer(tmp_path):
+    store, _ = make_store(tmp_path)
+    assert store.timeout_for("voter") == 600
+    assert store.timeout_for("voter") > store.timeout_for("admin")
