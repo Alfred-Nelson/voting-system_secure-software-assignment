@@ -37,14 +37,16 @@ STAFF = [
 TERMINALS = [("PS-SYD-001", "Sydney Town Hall polling place"),
              ("MISSION-LON-01", "Australian High Commission, London")]
 
-# Demo-only password for the fictional voters (override with env var).
+# Demo-only passwords for the fictional accounts (override with env vars).
 DEMO_VOTER_PASSWORD = os.environ.get("EVOTE_DEMO_VOTER_PASSWORD", "Voter#Pass2026")  # nosec B105
+DEMO_STAFF_PASSWORD = os.environ.get("EVOTE_DEMO_STAFF_PASSWORD", "Staff#Pass2026")  # nosec B105
 
 
 def seed(svc):
     """Populate an empty database."""
     fc = svc.keys.field_cipher()
     voter_hash = passwords.hash_password(DEMO_VOTER_PASSWORD)
+    staff_hash = passwords.hash_password(DEMO_STAFF_PASSWORD)
 
     with svc.dbs.connect("ballot") as conn:
         conn.executemany("INSERT OR IGNORE INTO groups VALUES (?,?,?)", GROUPS)
@@ -62,3 +64,8 @@ def seed(svc):
                 (fc.blind_index(enrol), fc.encrypt(enrol, "enrol"), fc.encrypt(name, "name"),
                  fc.encrypt(addr, "address"), fc.encrypt(dob, "dob"), div, state, enrolled,
                  voter_hash, fc.encrypt(secret, "totp")))
+        for username, role, state in STAFF:
+            secret = totp.new_secret()
+            conn.execute("INSERT INTO staff (username, role, state, password_hash, "
+                         "totp_secret_enc) VALUES (?,?,?,?,?)",
+                         (username, role, state, staff_hash, fc.encrypt(secret, "totp")))
