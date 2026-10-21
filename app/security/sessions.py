@@ -50,3 +50,7 @@ class SessionStore:
                 return None, "session expired after inactivity"
             conn.execute("UPDATE sessions SET last_active = ? WHERE token_hash = ?", (now, h))
         return dict(row), None
+
+    def destroy(self, token):
+        with self.dbs.connect("identity") as conn:
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (self._hash(token),))
