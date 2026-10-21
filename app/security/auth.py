@@ -21,3 +21,9 @@ class Authenticator:
     def __init__(self, dbs, keys, audit, monitor, sessions, cfg):
         self.dbs, self.keys, self.audit = dbs, keys, audit
         self.monitor, self.sessions, self.cfg = monitor, sessions, cfg
+
+    def _login(self, table, lookup_col, lookup_val, actor, password, code, role_of):
+        if not password or not code:
+            self.audit.record("auth.rejected_single_factor", actor, "unknown",
+                              {"has_password": bool(password), "has_totp": bool(code)})
+            raise AuthError("password and one-time code are both required")
