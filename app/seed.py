@@ -1,5 +1,7 @@
 """Demo data: a fictional NSW Senate election. All names are invented."""
+import hashlib
 import os
+import secrets
 
 from .security import passwords, totp
 
@@ -69,3 +71,7 @@ def seed(svc):
             conn.execute("INSERT INTO staff (username, role, state, password_hash, "
                          "totp_secret_enc) VALUES (?,?,?,?,?)",
                          (username, role, state, staff_hash, fc.encrypt(secret, "totp")))
+        conn.executemany("INSERT INTO terminals (id, location) VALUES (?,?)", TERMINALS)
+        api_key = secrets.token_urlsafe(24)
+        conn.execute("INSERT INTO api_clients (name, key_hash) VALUES (?,?)",
+                     ("demo-media-outlet", hashlib.sha256(api_key.encode()).hexdigest()))
