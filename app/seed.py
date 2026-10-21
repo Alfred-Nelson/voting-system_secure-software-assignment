@@ -33,3 +33,12 @@ STAFF = [
 ]
 TERMINALS = [("PS-SYD-001", "Sydney Town Hall polling place"),
              ("MISSION-LON-01", "Australian High Commission, London")]
+
+
+def seed(svc):
+    """Populate an empty database."""
+    with svc.dbs.connect("ballot") as conn:
+        conn.executemany("INSERT OR IGNORE INTO groups VALUES (?,?,?)", GROUPS)
+        conn.executemany("INSERT OR IGNORE INTO candidates (id, name, party, group_code, position,"
+                         " state) VALUES (?,?,?,?,?,?)", CANDIDATES)
+        conn.execute("INSERT OR IGNORE INTO election VALUES ('status', 'setup')")
