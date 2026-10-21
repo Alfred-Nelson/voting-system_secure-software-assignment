@@ -4,6 +4,9 @@ is an infrastructure control - see the report."""
 import threading
 import time
 from collections import defaultdict, deque
+from functools import wraps
+
+from flask import current_app, jsonify, request
 
 
 class RateLimiter:
@@ -21,3 +24,16 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+
+def limit(bucket, config_attr, key_fn=None):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            svc = current_app.evote
+            key = key_fn() if key_fn else (request.remote_addr or "unknown")
+            if not svc.limiter.allow(bucket, key, getattr(svc.cfg, config_attr)):
+                return jsonify(error="rate limit exceeded"), 429
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
