@@ -45,8 +45,10 @@ DEMO_STAFF_PASSWORD = os.environ.get("EVOTE_DEMO_STAFF_PASSWORD", "Staff#Pass202
 
 
 def seed(svc):
-    """Populate an empty database."""
+    """Populate an empty database. Returns the demo credentials."""
     fc = svc.keys.field_cipher()
+    creds = {"voters": {}, "staff": {}, "voter_password": DEMO_VOTER_PASSWORD,
+             "staff_password": DEMO_STAFF_PASSWORD}
     voter_hash = passwords.hash_password(DEMO_VOTER_PASSWORD)
     staff_hash = passwords.hash_password(DEMO_STAFF_PASSWORD)
 
@@ -66,12 +68,19 @@ def seed(svc):
                 (fc.blind_index(enrol), fc.encrypt(enrol, "enrol"), fc.encrypt(name, "name"),
                  fc.encrypt(addr, "address"), fc.encrypt(dob, "dob"), div, state, enrolled,
                  voter_hash, fc.encrypt(secret, "totp")))
+            creds["voters"][enrol] = {"name": name, "totp_secret": secret,
+                                      "note": "" if enrolled and state == "NSW" and dob < "2008"
+                                      else "ineligible (demo)"}
         for username, role, state in STAFF:
             secret = totp.new_secret()
             conn.execute("INSERT INTO staff (username, role, state, password_hash, "
                          "totp_secret_enc) VALUES (?,?,?,?,?)",
                          (username, role, state, staff_hash, fc.encrypt(secret, "totp")))
+            creds["staff"][username] = {"role": role, "state": state, "totp_secret": secret}
         conn.executemany("INSERT INTO terminals (id, location) VALUES (?,?)", TERMINALS)
         api_key = secrets.token_urlsafe(24)
         conn.execute("INSERT INTO api_clients (name, key_hash) VALUES (?,?)",
                      ("demo-media-outlet", hashlib.sha256(api_key.encode()).hexdigest()))
+        creds["results_api_key"] = api_key
+    svc.audit.record("system.seeded", "system", "system", {"voters": len(VOTERS)})
+    return creds
