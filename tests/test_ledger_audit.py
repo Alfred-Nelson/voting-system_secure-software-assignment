@@ -32,3 +32,19 @@ def test_audit_detects_deleted_entry(svc, creds):
         c.execute("DROP TRIGGER audit_no_delete")
         c.execute("DELETE FROM audit_log WHERE seq = 2")
     assert "chain broken" in svc.audit.verify_chain()["reason"]
+
+
+def test_audit_detects_recomputed_hash_without_mac_key(svc, creds):
+    """An attacker who recomputes the SHA-256 chain still can't produce valid MACs."""
+    from app.security.audit import AuditLog
+    svc.audit.record("test.event", "tester", "admin", {})
+    with sqlite3.connect(svc.dbs.paths["audit"]) as c:
+        c.row_factory = sqlite3.Row
+        c.execute("DROP TRIGGER audit_no_update")
+        last = c.execute("SELECT * FROM audit_log ORDER BY seq DESC LIMIT 1").fetchone()
+        forged = AuditLog._entry_hash(last["prev_hash"], last["ts"], "evil", last["role"],
+                                      last["action"], last["details"])
+        c.execute("UPDATE audit_log SET actor = 'evil', entry_hash = ? WHERE seq = ?",
+                  (forged, last["seq"]))
+    res = svc.audit.verify_chain()
+    assert not res["ok"] and "MAC" in res["reason"]
