@@ -45,6 +45,7 @@ class Helper:
     def __init__(self, app, http, creds):
         self.app, self.http, self.creds = app, http, creds
         self._last = {}
+        self._headers = {}
 
     def code(self, who):
         e = self.creds["voters"].get(who) or self.creds["staff"].get(who)
@@ -53,6 +54,15 @@ class Helper:
         assert step <= now_step + 1, "test logs in the same account too often"
         self._last[who] = step
         return totp.now_code(e["totp_secret"], at=step * 30 + 1)
+
+    def staff(self, user, fresh=False):
+        if not fresh and user in self._headers:
+            return self._headers[user]
+        r = self.http.post("/api/auth/staff/login", json={
+            "username": user, "password": self.creds["staff_password"], "totp": self.code(user)})
+        assert r.status_code == 200, r.get_json()
+        self._headers[user] = {"Authorization": "Bearer " + r.get_json()["token"]}
+        return self._headers[user]
 
 
 @pytest.fixture
