@@ -34,3 +34,19 @@ class SessionStore:
     def timeout_for(self, role):
         return (self.cfg.PRIVILEGED_IDLE_TIMEOUT_SEC if role in PRIVILEGED_ROLES
                 else self.cfg.VOTER_IDLE_TIMEOUT_SEC)
+
+    def validate(self, token, now=None):
+        """Returns (session, None) or (None, reason)."""
+        if not token:
+            return None, "missing token"
+        now = now or time.time()
+        h = self._hash(token)
+        with self.dbs.connect("identity") as conn:
+            row = conn.execute("SELECT * FROM sessions WHERE token_hash = ?", (h,)).fetchone()
+            if not row:
+                return None, "invalid session"
+            if now - row["last_active"] > self.timeout_for(row["role"]):
+                conn.execute("DELETE FROM sessions WHERE token_hash = ?", (h,))
+                return None, "session expired after inactivity"
+            conn.execute("UPDATE sessions SET last_active = ? WHERE token_hash = ?", (now, h))
+        return dict(row), None
