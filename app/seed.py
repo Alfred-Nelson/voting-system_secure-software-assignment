@@ -1,4 +1,7 @@
 """Demo data: a fictional NSW Senate election. All names are invented."""
+import os
+
+from .security import passwords, totp
 
 GROUPS = [("A", "Harbour Alliance", 1), ("B", "Coastal Progress Party", 2),
           ("C", "Outback Independents", 3)]
@@ -34,11 +37,28 @@ STAFF = [
 TERMINALS = [("PS-SYD-001", "Sydney Town Hall polling place"),
              ("MISSION-LON-01", "Australian High Commission, London")]
 
+# Demo-only password for the fictional voters (override with env var).
+DEMO_VOTER_PASSWORD = os.environ.get("EVOTE_DEMO_VOTER_PASSWORD", "Voter#Pass2026")  # nosec B105
+
 
 def seed(svc):
     """Populate an empty database."""
+    fc = svc.keys.field_cipher()
+    voter_hash = passwords.hash_password(DEMO_VOTER_PASSWORD)
+
     with svc.dbs.connect("ballot") as conn:
         conn.executemany("INSERT OR IGNORE INTO groups VALUES (?,?,?)", GROUPS)
         conn.executemany("INSERT OR IGNORE INTO candidates (id, name, party, group_code, position,"
                          " state) VALUES (?,?,?,?,?,?)", CANDIDATES)
         conn.execute("INSERT OR IGNORE INTO election VALUES ('status', 'setup')")
+
+    with svc.dbs.connect("identity") as conn:
+        for enrol, name, addr, dob, div, state, enrolled in VOTERS:
+            secret = totp.new_secret()
+            conn.execute(
+                "INSERT INTO voters (enrol_index, enrol_enc, name_enc, address_enc, dob_enc, "
+                "division, state, enrolled, password_hash, totp_secret_enc) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (fc.blind_index(enrol), fc.encrypt(enrol, "enrol"), fc.encrypt(name, "name"),
+                 fc.encrypt(addr, "address"), fc.encrypt(dob, "dob"), div, state, enrolled,
+                 voter_hash, fc.encrypt(secret, "totp")))
