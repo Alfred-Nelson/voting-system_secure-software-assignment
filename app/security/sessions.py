@@ -30,3 +30,7 @@ class SessionStore:
                          (self._hash(token), subject_type, subject_id, username, role, state,
                           now, now))
         return token
+
+    def timeout_for(self, role):
+        return (self.cfg.PRIVILEGED_IDLE_TIMEOUT_SEC if role in PRIVILEGED_ROLES
+                else self.cfg.VOTER_IDLE_TIMEOUT_SEC)
