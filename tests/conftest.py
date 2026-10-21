@@ -1,5 +1,6 @@
 import secrets
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import create_app                    # noqa: E402
 from app.config import TestConfig             # noqa: E402
+from app.security import totp                 # noqa: E402
 from app.seed import seed                     # noqa: E402
 
 
@@ -29,3 +31,30 @@ def svc(app):
 @pytest.fixture
 def creds(svc):
     return seed(svc)
+
+
+@pytest.fixture
+def http(app):
+    return app.test_client()
+
+
+class Helper:
+    """Login helpers. TOTP codes can't be replayed, so each login by the same
+    account uses the next time-step (the server accepts +/-1 step of drift)."""
+
+    def __init__(self, app, http, creds):
+        self.app, self.http, self.creds = app, http, creds
+        self._last = {}
+
+    def code(self, who):
+        e = self.creds["voters"].get(who) or self.creds["staff"].get(who)
+        now_step = int(time.time() // 30)
+        step = max(now_step, self._last.get(who, -1) + 1)
+        assert step <= now_step + 1, "test logs in the same account too often"
+        self._last[who] = step
+        return totp.now_code(e["totp_secret"], at=step * 30 + 1)
+
+
+@pytest.fixture
+def h(app, http, creds):
+    return Helper(app, http, creds)
