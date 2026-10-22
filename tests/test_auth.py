@@ -19,6 +19,13 @@ def test_voter_login_with_both_factors(h, http, creds):
     assert r.status_code == 200 and r.get_json()["role"] == "voter"
 
 
+def test_single_factor_rejected_and_audited(h, http, creds, svc):
+    r = http.post("/api/auth/voter/login", json={"enrolment_id": "NSW1000001",
+                                                  "password": creds["voter_password"]})
+    assert r.status_code == 401
+    assert any(e["action"] == "auth.rejected_single_factor" for e in svc.audit.entries())
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
