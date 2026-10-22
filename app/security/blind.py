@@ -26,3 +26,8 @@ def blind(m: int, n: int, e: int):
         if gcd(r, n) == 1:
             break
     return (m * pow(r, e, n)) % n, r
+
+
+def unblind(blind_sig: int, r: int, n: int) -> int:
+    """Client side."""
+    return (blind_sig * pow(r, -1, n)) % n
