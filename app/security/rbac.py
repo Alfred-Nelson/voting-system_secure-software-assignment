@@ -1,5 +1,7 @@
 """Role-based access control with least privilege (SR-16)."""
-from flask import request
+from functools import wraps
+
+from flask import current_app, g, jsonify, request
 
 ROLE_PERMISSIONS = {
     "voter": {"ballot.view", "credential.request"},
@@ -18,3 +20,21 @@ def has_permission(role, permission):
 def _bearer():
     header = request.headers.get("Authorization", "")
     return header[7:] if header.startswith("Bearer ") else None
+
+
+def require(permission):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            svc = current_app.evote
+            session, reason = svc.sessions.validate(_bearer())
+            if not session:
+                return jsonify(error=reason), 401
+            g.user = session
+            if not has_permission(session["role"], permission):
+                svc.audit.record("access.denied", session["username"], session["role"],
+                                 {"permission": permission, "path": request.path})
+                return jsonify(error="forbidden"), 403
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
