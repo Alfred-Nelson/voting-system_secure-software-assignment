@@ -73,3 +73,18 @@ class Authenticator:
                                      "last_totp_counter = ? WHERE id = ?", (counter, row["id"]))
         if error:
             raise AuthError(error)
+        token = self.sessions.create(table, row["id"], actor, role, state)
+        self.audit.record("auth.success", actor, role, {"mfa": True})
+        return {"token": token, "role": role, "state": state,
+                "idle_timeout_sec": self.sessions.timeout_for(role)}
+
+    def voter_login(self, enrolment_id, password, code):
+        fc = self.keys.field_cipher()
+        index = fc.blind_index(enrolment_id or "")
+        actor = f"voter:{index[:10]}"
+        return self._login("voters", "enrol_index", index, actor, password, code,
+                           lambda r: ("voter", r["state"]))
+
+    def staff_login(self, username, password, code):
+        return self._login("staff", "username", username or "", username or "?", password, code,
+                           lambda r: (r["role"], r["state"]))
