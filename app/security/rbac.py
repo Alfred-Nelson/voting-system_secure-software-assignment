@@ -38,3 +38,18 @@ def require(permission):
             return fn(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def enforce_state_scope(target_state):
+    """Call inside a handler after @require. Returns an error response or None."""
+    user = g.user
+    if user["role"] == "delegate" and user["state"] != target_state:
+        svc = current_app.evote
+        svc.audit.record("access.out_of_scope", user["username"], user["role"],
+                         {"own_state": user["state"], "target_state": target_state,
+                          "path": request.path})
+        svc.monitor.alert("high", "rbac.out_of_scope",
+                          f"Delegate {user['username']} ({user['state']}) tried to modify "
+                          f"{target_state} data")
+        return jsonify(error="forbidden: outside your state/territory"), 403
+    return None
