@@ -13,3 +13,7 @@ Protocol
 import hashlib
 import secrets
 from math import gcd
+
+
+def message_int(credential_spki: bytes, n: int) -> int:
+    return int.from_bytes(hashlib.sha256(credential_spki).digest(), "big") % n
