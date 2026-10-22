@@ -46,3 +46,8 @@ class Ledger:
             conn.execute("INSERT INTO ledger (kind, item_hash, prev_hash, entry_hash) "
                          "VALUES (?,?,?,?)", ("batch", checksum, entry, batch_entry))
         return entry
+
+    def head(self):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT seq, entry_hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
+        return {"seq": row["seq"], "head": row["entry_hash"]} if row else {"seq": 0, "head": GENESIS}
