@@ -33,6 +33,12 @@ def test_wrong_code_and_unknown_user_give_same_error(h, http, creds):
     assert a == b == c == "invalid credentials"      # no account enumeration
 
 
+def test_totp_code_cannot_be_replayed(h, http, creds):
+    code = h.code("NSW1000001")
+    assert login(http, "NSW1000001", creds["voter_password"], code).status_code == 200
+    assert login(http, "NSW1000001", creds["voter_password"], code).status_code == 401
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
