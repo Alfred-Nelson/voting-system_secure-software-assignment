@@ -1,4 +1,6 @@
 """SR-01, SR-02 authentication and session control."""
+import time
+
 from app.config import TestConfig
 from app.db import Databases
 from app.security.sessions import SessionStore
@@ -46,6 +48,19 @@ def test_lockout_after_five_failures_and_alerts(h, http, creds, svc):
     assert r.status_code == 401 and "locked" in r.get_json()["error"]
     kinds = [a["kind"] for a in svc.monitor.alerts()]
     assert "auth.lockout" in kinds and "auth.repeated_failures" in kinds
+
+
+def test_staff_requires_mfa_and_gets_3_minute_idle_timeout(h, http, creds, svc):
+    r = http.post("/api/auth/staff/login", json={"username": "admin1",
+                                                  "password": creds["staff_password"]})
+    assert r.status_code == 401
+    hdr = h.staff("admin1")
+    token = hdr["Authorization"][7:]
+    assert http.get("/api/auth/me", headers=hdr).get_json()["idle_timeout_sec"] == 180
+    session, _ = svc.sessions.validate(token, now=time.time() + 170)
+    assert session is not None                       # still active at 170 s
+    session, reason = svc.sessions.validate(token, now=time.time() + 360)
+    assert session is None and "inactivity" in reason
 
 
 def test_session_tokens_stored_hashed(tmp_path):
