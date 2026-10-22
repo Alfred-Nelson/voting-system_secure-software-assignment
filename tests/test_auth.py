@@ -63,6 +63,13 @@ def test_staff_requires_mfa_and_gets_3_minute_idle_timeout(h, http, creds, svc):
     assert session is None and "inactivity" in reason
 
 
+def test_logout_invalidates_session(h, http):
+    hdr = h.staff("auditor1")
+    assert http.get("/api/auth/me", headers=hdr).status_code == 200
+    http.post("/api/auth/logout", headers=hdr)
+    assert http.get("/api/auth/me", headers=hdr).status_code == 401
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
