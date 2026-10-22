@@ -9,6 +9,16 @@ def make_store(tmp_path):
     return SessionStore(dbs, TestConfig), dbs
 
 
+def login(http, enrol, password, code):
+    return http.post("/api/auth/voter/login",
+                     json={"enrolment_id": enrol, "password": password, "totp": code})
+
+
+def test_voter_login_with_both_factors(h, http, creds):
+    r = login(http, "NSW1000001", creds["voter_password"], h.code("NSW1000001"))
+    assert r.status_code == 200 and r.get_json()["role"] == "voter"
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
