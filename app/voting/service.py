@@ -124,4 +124,6 @@ class ElectionService:
             except CryptoError as exc:
                 raise VotingError(str(exc))
             conn.execute("UPDATE voters SET token_issued = 1 WHERE id = ?", (voter_id,))
+        # No blinded value or signature is logged - nothing that could link later.
+        self.audit.record("credential.issued", f"voter:{voter_id}", "voter", {})
         return format(signature, "x")
