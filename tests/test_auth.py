@@ -39,6 +39,15 @@ def test_totp_code_cannot_be_replayed(h, http, creds):
     assert login(http, "NSW1000001", creds["voter_password"], code).status_code == 401
 
 
+def test_lockout_after_five_failures_and_alerts(h, http, creds, svc):
+    for _ in range(5):
+        login(http, "NSW1000002", "bad", "123456")
+    r = login(http, "NSW1000002", creds["voter_password"], h.code("NSW1000002"))
+    assert r.status_code == 401 and "locked" in r.get_json()["error"]
+    kinds = [a["kind"] for a in svc.monitor.alerts()]
+    assert "auth.lockout" in kinds and "auth.repeated_failures" in kinds
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
