@@ -7,6 +7,7 @@ Flow:
 from datetime import date
 
 from ..security import blind
+from ..security.crypto import CryptoError
 from .ledger import ballot_hash
 
 
@@ -93,3 +94,34 @@ class ElectionService:
         if voter["state"] != self.cfg.ELECTION_STATE:
             return f"enrolled in {voter['state']}, not {self.cfg.ELECTION_STATE}"
         return None
+
+    def issue_credential(self, voter_id, blinded_hex):
+        """SR-03 + SR-04 + SR-07. Atomic: the voter row is locked while checking
+        and the status flag is set in the same transaction."""
+        if self.status() != "open":
+            raise VotingError("voting is not open", 409)
+        try:
+            blinded = int(blinded_hex, 16)
+        except (TypeError, ValueError):
+            raise VotingError("blinded value must be hex")
+        with self.dbs.transaction("identity") as conn:
+            voter = conn.execute("SELECT * FROM voters WHERE id = ?", (voter_id,)).fetchone()
+            if voter is None:
+                raise VotingError("unknown voter", 404)
+            reason = self._check_eligible(voter)
+            if reason:
+                self.audit.record("eligibility.denied", f"voter:{voter_id}", "voter",
+                                  {"reason": reason})
+                raise VotingError(f"not eligible: {reason}", 403)
+            if voter["token_issued"] or voter["voted_channel"]:
+                channel = voter["voted_channel"] or "online"
+                self.audit.record("double_vote.blocked", f"voter:{voter_id}", "voter",
+                                  {"existing_channel": channel, "attempted": "online"})
+                raise VotingError(f"already voted ({channel}). To change an online vote, "
+                                  "re-submit using the credential stored on your device.", 409)
+            try:
+                signature = self.keys.blind_sign(blinded)
+            except CryptoError as exc:
+                raise VotingError(str(exc))
+            conn.execute("UPDATE voters SET token_issued = 1 WHERE id = ?", (voter_id,))
+        return format(signature, "x")
