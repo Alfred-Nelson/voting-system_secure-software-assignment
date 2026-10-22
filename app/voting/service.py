@@ -51,3 +51,32 @@ class ElectionService:
                           {"before": old, "after": new_status})
         self.monitor.alert("info", "config.change",
                            f"Election status changed {old} -> {new_status} by {actor}")
+
+    def ballot_paper(self):
+        with self.dbs.connect("ballot") as conn:
+            groups = [dict(r) for r in conn.execute("SELECT * FROM groups ORDER BY position")]
+            cands = [dict(r) for r in conn.execute(
+                "SELECT id, name, party, group_code, position, state, excluded FROM candidates "
+                "WHERE state = ? ORDER BY CASE WHEN group_code IS NULL THEN 1 ELSE 0 END, "
+                "group_code, position", (self.cfg.ELECTION_STATE,))]
+        for g in groups:
+            g["candidates"] = [c["id"] for c in cands if c["group_code"] == g["code"]]
+        return groups, cands
+
+    def public_info(self):
+        groups, cands = self.ballot_paper()
+        n, e = self.keys.blind_public()
+        return {
+            "status": self.status(),
+            "state": self.cfg.ELECTION_STATE,
+            "vacancies": self.cfg.VACANCIES,
+            "groups": groups,
+            "candidates": cands,
+            "pad_bytes": self.cfg.BALLOT_PAD_BYTES,
+            "keys": {
+                "blind_n": format(n, "x"),
+                "blind_e": format(e, "x"),
+                "ballot_encryption_pem": self.keys.ballot_public_pem(),
+                "receipt_verify_pem": self.keys.public_key_pem("receipt_sign"),
+            },
+        }
