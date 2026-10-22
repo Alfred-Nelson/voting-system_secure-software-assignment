@@ -36,4 +36,13 @@ class Ledger:
         entry = _entry_hash(prev, "ballot", item_hash)
         conn.execute("INSERT INTO ledger (kind, item_hash, prev_hash, entry_hash) VALUES (?,?,?,?)",
                      ("ballot", item_hash, prev, entry))
+        count = conn.execute("SELECT COUNT(*) FROM ledger WHERE kind='ballot'").fetchone()[0]
+        if count % self.batch_size == 0:
+            hashes = [r[0] for r in conn.execute(
+                "SELECT item_hash FROM ledger WHERE kind='ballot' ORDER BY seq DESC LIMIT ?",
+                (self.batch_size,))]
+            checksum = hashlib.sha256("".join(reversed(hashes)).encode()).hexdigest()
+            batch_entry = _entry_hash(entry, "batch", checksum)
+            conn.execute("INSERT INTO ledger (kind, item_hash, prev_hash, entry_hash) "
+                         "VALUES (?,?,?,?)", ("batch", checksum, entry, batch_entry))
         return entry
