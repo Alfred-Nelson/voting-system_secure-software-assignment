@@ -2,8 +2,10 @@
 import os
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
+from app.security import blind
 from app.security.crypto import (CryptoError, FieldCipher, aes_decrypt, aes_encrypt,
                                  ecdsa_sign_raw, ecdsa_verify_raw, hybrid_decrypt, hybrid_encrypt,
                                  pad_fixed, unpad_fixed)
@@ -61,3 +63,19 @@ def test_ecdsa_raw_signatures():                                    # SR-10
     ecdsa_verify_raw(key.public_key(), sig, b"envelope")
     with pytest.raises(CryptoError):
         ecdsa_verify_raw(key.public_key(), sig, b"envelope2")
+
+
+def test_blind_signature_is_valid_and_unlinkable():                 # SR-07
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    n, e = priv.public_key().public_numbers().n, 65537
+    d = priv.private_numbers().d
+    spki = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    m = blind.message_int(spki, n)
+    blinded, r = blind.blind(m, n, e)
+    assert blinded != m                     # the signer never sees the real message
+    sig = blind.unblind(pow(blinded, d, n), r, n)
+    assert blind.verify(m, sig, n, e)
+    assert not blind.verify(m, sig + 1, n, e)
+    # Two blindings of the same message look completely different to the signer
+    assert blind.blind(m, n, e)[0] != blind.blind(m, n, e)[0]

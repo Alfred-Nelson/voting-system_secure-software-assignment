@@ -1,0 +1,43 @@
+"""Chaum RSA blind signatures (SR-07: cryptographic separation of voter and vote).
+
+Protocol
+  1. Voter device creates an anonymous credential (ECDSA key pair) and computes
+     m = SHA-256(credential public key) mod n.
+  2. Device picks random r and sends the *blinded* value  m' = m * r^e mod n.
+  3. The authority checks eligibility / double voting, then signs blindly with
+     KeyManager.blind_sign: s' = (m')^d mod n. It never sees m.
+  4. Device unblinds: s = s' * r^-1 mod n, which is a valid signature on m.
+  5. The ballot is submitted with (credential, s). The server can verify that an
+     eligible voter was issued this credential but cannot tell which one.
+
+Prototype note: this is textbook RSA-FDH with a SHA-256 digest. A production
+system would use RSA Blind Signatures with PSS encoding (RFC 9474).
+"""
+import hashlib
+import secrets
+from math import gcd
+
+
+def message_int(credential_spki: bytes, n: int) -> int:
+    return int.from_bytes(hashlib.sha256(credential_spki).digest(), "big") % n
+
+
+def blind(m: int, n: int, e: int):
+    """Client side. Returns (blinded, r)."""
+    while True:
+        r = secrets.randbelow(n - 2) + 2
+        if gcd(r, n) == 1:
+            break
+    return (m * pow(r, e, n)) % n, r
+
+
+def unblind(blind_sig: int, r: int, n: int) -> int:
+    """Client side."""
+    return (blind_sig * pow(r, -1, n)) % n
+
+
+def verify(m: int, sig: int, n: int, e: int) -> bool:
+    """Server side (ballot submission)."""
+    if not 0 < sig < n:
+        return False
+    return pow(sig, e, n) == m
