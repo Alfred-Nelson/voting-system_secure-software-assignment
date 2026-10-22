@@ -9,6 +9,9 @@ Protocol
   4. Device unblinds: s = s' * r^-1 mod n, which is a valid signature on m.
   5. The ballot is submitted with (credential, s). The server can verify that an
      eligible voter was issued this credential but cannot tell which one.
+
+Prototype note: this is textbook RSA-FDH with a SHA-256 digest. A production
+system would use RSA Blind Signatures with PSS encoding (RFC 9474).
 """
 import hashlib
 import secrets
