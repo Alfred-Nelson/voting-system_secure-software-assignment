@@ -17,3 +17,12 @@ from math import gcd
 
 def message_int(credential_spki: bytes, n: int) -> int:
     return int.from_bytes(hashlib.sha256(credential_spki).digest(), "big") % n
+
+
+def blind(m: int, n: int, e: int):
+    """Client side. Returns (blinded, r)."""
+    while True:
+        r = secrets.randbelow(n - 2) + 2
+        if gcd(r, n) == 1:
+            break
+    return (m * pow(r, e, n)) % n, r
