@@ -127,3 +127,29 @@ class ElectionService:
         # No blinded value or signature is logged - nothing that could link later.
         self.audit.record("credential.issued", f"voter:{voter_id}", "voter", {})
         return format(signature, "x")
+
+    def mark_offline_vote(self, enrolment_id, channel, staff_user):
+        """SR-04 cross-channel: polling station / postal votes."""
+        if channel not in ("station", "postal"):
+            raise VotingError("channel must be 'station' or 'postal'")
+        fc = self.keys.field_cipher()
+        with self.dbs.transaction("identity") as conn:
+            voter = conn.execute("SELECT * FROM voters WHERE enrol_index = ?",
+                                 (fc.blind_index(enrolment_id),)).fetchone()
+            if voter is None:
+                raise VotingError("voter not found on roll", 404)
+            reason = self._check_eligible(voter)
+            if reason:
+                raise VotingError(f"not eligible: {reason}", 403)
+            if voter["token_issued"] or voter["voted_channel"]:
+                existing = voter["voted_channel"] or "online"
+                self.audit.record("double_vote.blocked", staff_user, "employee",
+                                  {"voter": voter["id"], "existing_channel": existing,
+                                   "attempted": channel})
+                self.monitor.alert("medium", "double_vote",
+                                   f"Second-channel vote attempt ({channel}) for a voter who "
+                                   f"already voted ({existing})")
+                raise VotingError(f"voter has already voted ({existing})", 409)
+            conn.execute("UPDATE voters SET voted_channel = ? WHERE id = ?", (channel, voter["id"]))
+        self.audit.record("vote.marked_offline", staff_user, "employee",
+                          {"voter": voter["id"], "channel": channel})
