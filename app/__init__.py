@@ -10,8 +10,11 @@ from flask import Flask, jsonify, request
 from .config import Config
 from .db import Databases
 from .security.audit import AuditLog
+from .security.auth import Authenticator
 from .security.keys import KeyManager
 from .security.monitor import Monitor
+from .security.ratelimit import RateLimiter
+from .security.sessions import SessionStore
 
 log = logging.getLogger("evote")
 
@@ -37,7 +40,7 @@ def create_app(config_object=Config, data_dir=None):
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024   # reject oversized requests early
 
     dbs = Databases(data_dir, cfg)
-    svc = SimpleNamespace(cfg=cfg, dbs=dbs)
+    svc = SimpleNamespace(cfg=cfg, dbs=dbs, limiter=RateLimiter())
     # Audit log needs the key manager and vice versa (key rotation is audited).
     holder = {}
     svc.keys = KeyManager(data_dir / cfg.KEYSTORE_FILE, _master_key(cfg, data_dir),
@@ -46,11 +49,17 @@ def create_app(config_object=Config, data_dir=None):
                               action, actor, "admin", details))
     svc.audit = holder["audit"] = AuditLog(dbs, svc.keys)
     svc.monitor = Monitor(dbs, svc.audit, cfg)
+    svc.sessions = SessionStore(dbs, cfg)
+    svc.auth = Authenticator(dbs, svc.keys, svc.audit, svc.monitor, svc.sessions, cfg)
     app.evote = svc
 
     due = svc.keys.needs_rotation()
     if due:
         svc.monitor.alert("medium", "keys.rotation_due", f"Keys due for 90-day rotation: {due}")
+
+    from .routes import auth
+    for bp in (auth.bp,):
+        app.register_blueprint(bp)
 
     @app.after_request
     def security_headers(resp):
