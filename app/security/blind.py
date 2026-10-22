@@ -31,3 +31,10 @@ def blind(m: int, n: int, e: int):
 def unblind(blind_sig: int, r: int, n: int) -> int:
     """Client side."""
     return (blind_sig * pow(r, -1, n)) % n
+
+
+def verify(m: int, sig: int, n: int, e: int) -> bool:
+    """Server side (ballot submission)."""
+    if not 0 < sig < n:
+        return False
+    return pow(sig, e, n) == m
