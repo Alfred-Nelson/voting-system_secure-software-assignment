@@ -26,6 +26,13 @@ def test_single_factor_rejected_and_audited(h, http, creds, svc):
     assert any(e["action"] == "auth.rejected_single_factor" for e in svc.audit.entries())
 
 
+def test_wrong_code_and_unknown_user_give_same_error(h, http, creds):
+    a = login(http, "NSW1000001", creds["voter_password"], "000000").get_json()["error"]
+    b = login(http, "NOPE0000", creds["voter_password"], "000000").get_json()["error"]
+    c = login(http, "NSW1000001", "wrong-password", h.code("NSW1000001")).get_json()["error"]
+    assert a == b == c == "invalid credentials"      # no account enumeration
+
+
 def test_session_tokens_stored_hashed(tmp_path):
     store, dbs = make_store(tmp_path)
     token = store.create("staff", 1, "admin1", "admin")
