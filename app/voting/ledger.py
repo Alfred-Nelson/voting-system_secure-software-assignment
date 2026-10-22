@@ -22,3 +22,9 @@ def ballot_hash(credential_hash, envelope_json, signature):
 
 def _entry_hash(prev, kind, item):
     return hashlib.sha256(f"{prev}|{kind}|{item}".encode()).hexdigest()
+
+
+class Ledger:
+    def __init__(self, dbs, batch_size=1000):
+        self.dbs = dbs
+        self.batch_size = batch_size
