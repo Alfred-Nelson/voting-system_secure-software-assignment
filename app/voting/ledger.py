@@ -51,3 +51,36 @@ class Ledger:
         with self.dbs.connect("ballot") as conn:
             row = conn.execute("SELECT seq, entry_hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
         return {"seq": row["seq"], "head": row["entry_hash"]} if row else {"seq": 0, "head": GENESIS}
+
+    def verify(self):
+        problems = []
+        ledger_ballots = set()
+        prev = GENESIS
+        batch = []
+        with self.dbs.connect("ballot") as conn:
+            for row in conn.execute("SELECT * FROM ledger ORDER BY seq"):
+                if row["prev_hash"] != prev or _entry_hash(prev, row["kind"], row["item_hash"]) \
+                        != row["entry_hash"]:
+                    problems.append(f"ledger chain broken at entry {row['seq']}")
+                    break
+                if row["kind"] == "ballot":
+                    ledger_ballots.add(row["item_hash"])
+                    batch.append(row["item_hash"])
+                else:
+                    expected = hashlib.sha256("".join(batch[-self.batch_size:]).encode()).hexdigest()
+                    if expected != row["item_hash"]:
+                        problems.append(f"batch checksum mismatch at entry {row['seq']}")
+                    batch = []
+                prev = row["entry_hash"]
+            stored = set()
+            for b in conn.execute("SELECT id, credential_hash, envelope, signature, ballot_hash "
+                                  "FROM ballots"):
+                h = ballot_hash(b["credential_hash"], b["envelope"], b["signature"])
+                stored.add(h)
+                if h != b["ballot_hash"] or h not in ledger_ballots:
+                    problems.append(f"stored ballot {b['id'][:8]} was modified or never ledgered")
+            missing = ledger_ballots - stored
+            if missing:
+                problems.append(f"{len(missing)} ledgered ballot(s) missing from the ballot store")
+        return {"ok": not problems, "ledger_entries": len(ledger_ballots),
+                "stored_ballots": len(stored), "problems": problems[:20]}
