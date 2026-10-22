@@ -28,3 +28,12 @@ class Ledger:
     def __init__(self, dbs, batch_size=1000):
         self.dbs = dbs
         self.batch_size = batch_size
+
+    def append_in(self, conn, item_hash):
+        """Append inside the caller's transaction (so ballot + ledger commit together)."""
+        row = conn.execute("SELECT entry_hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
+        prev = row["entry_hash"] if row else GENESIS
+        entry = _entry_hash(prev, "ballot", item_hash)
+        conn.execute("INSERT INTO ledger (kind, item_hash, prev_hash, entry_hash) VALUES (?,?,?,?)",
+                     ("ballot", item_hash, prev, entry))
+        return entry
