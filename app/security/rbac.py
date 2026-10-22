@@ -1,4 +1,11 @@
-"""Role-based access control with least privilege (SR-16)."""
+"""Role-based access control with least privilege (SR-16).
+
+Each role gets only the permissions it needs. Commissioner's delegates are
+further limited to candidate data of their own state/territory; any attempt to
+reach outside that scope is denied, audited and raises a security alert.
+Separation of duties: administrators cannot read the audit log and auditors
+cannot change the election.
+"""
 from functools import wraps
 
 from flask import current_app, g, jsonify, request
