@@ -40,3 +40,14 @@ class ElectionService:
 
     def status(self):
         return self.get("status", "setup")
+
+    def set_status(self, new_status, actor, role):
+        allowed = {"setup": {"open"}, "open": {"closed"}, "closed": set()}
+        old = self.status()
+        if new_status not in allowed.get(old, set()):
+            raise VotingError(f"cannot change election from '{old}' to '{new_status}'")
+        self.set("status", new_status)
+        self.audit.record("election.status_changed", actor, role,
+                          {"before": old, "after": new_status})
+        self.monitor.alert("info", "config.change",
+                           f"Election status changed {old} -> {new_status} by {actor}")
