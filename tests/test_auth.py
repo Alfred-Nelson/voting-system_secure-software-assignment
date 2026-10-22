@@ -1,4 +1,6 @@
 """SR-01, SR-02 authentication and session control."""
+import time
+
 from app.config import TestConfig
 from app.db import Databases
 from app.security.sessions import SessionStore
@@ -17,6 +19,55 @@ def login(http, enrol, password, code):
 def test_voter_login_with_both_factors(h, http, creds):
     r = login(http, "NSW1000001", creds["voter_password"], h.code("NSW1000001"))
     assert r.status_code == 200 and r.get_json()["role"] == "voter"
+
+
+def test_single_factor_rejected_and_audited(h, http, creds, svc):
+    r = http.post("/api/auth/voter/login", json={"enrolment_id": "NSW1000001",
+                                                  "password": creds["voter_password"]})
+    assert r.status_code == 401
+    assert any(e["action"] == "auth.rejected_single_factor" for e in svc.audit.entries())
+
+
+def test_wrong_code_and_unknown_user_give_same_error(h, http, creds):
+    a = login(http, "NSW1000001", creds["voter_password"], "000000").get_json()["error"]
+    b = login(http, "NOPE0000", creds["voter_password"], "000000").get_json()["error"]
+    c = login(http, "NSW1000001", "wrong-password", h.code("NSW1000001")).get_json()["error"]
+    assert a == b == c == "invalid credentials"      # no account enumeration
+
+
+def test_totp_code_cannot_be_replayed(h, http, creds):
+    code = h.code("NSW1000001")
+    assert login(http, "NSW1000001", creds["voter_password"], code).status_code == 200
+    assert login(http, "NSW1000001", creds["voter_password"], code).status_code == 401
+
+
+def test_lockout_after_five_failures_and_alerts(h, http, creds, svc):
+    for _ in range(5):
+        login(http, "NSW1000002", "bad", "123456")
+    r = login(http, "NSW1000002", creds["voter_password"], h.code("NSW1000002"))
+    assert r.status_code == 401 and "locked" in r.get_json()["error"]
+    kinds = [a["kind"] for a in svc.monitor.alerts()]
+    assert "auth.lockout" in kinds and "auth.repeated_failures" in kinds
+
+
+def test_staff_requires_mfa_and_gets_3_minute_idle_timeout(h, http, creds, svc):
+    r = http.post("/api/auth/staff/login", json={"username": "admin1",
+                                                  "password": creds["staff_password"]})
+    assert r.status_code == 401
+    hdr = h.staff("admin1")
+    token = hdr["Authorization"][7:]
+    assert http.get("/api/auth/me", headers=hdr).get_json()["idle_timeout_sec"] == 180
+    session, _ = svc.sessions.validate(token, now=time.time() + 170)
+    assert session is not None                       # still active at 170 s
+    session, reason = svc.sessions.validate(token, now=time.time() + 360)
+    assert session is None and "inactivity" in reason
+
+
+def test_logout_invalidates_session(h, http):
+    hdr = h.staff("auditor1")
+    assert http.get("/api/auth/me", headers=hdr).status_code == 200
+    http.post("/api/auth/logout", headers=hdr)
+    assert http.get("/api/auth/me", headers=hdr).status_code == 401
 
 
 def test_session_tokens_stored_hashed(tmp_path):
