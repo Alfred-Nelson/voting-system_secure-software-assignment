@@ -80,3 +80,16 @@ class ElectionService:
                 "receipt_verify_pem": self.keys.public_key_pem("receipt_sign"),
             },
         }
+
+    # ------------------------------------------------------------ identity side
+    def _check_eligible(self, voter):
+        """SR-03: enrolled, 18+, enrolled in the state holding this election."""
+        fc = self.keys.field_cipher()
+        dob = fc.decrypt(voter["dob_enc"], "dob")
+        if not voter["enrolled"]:
+            return "not on the electoral roll"
+        if _age(dob) < 18:
+            return "under 18"
+        if voter["state"] != self.cfg.ELECTION_STATE:
+            return f"enrolled in {voter['state']}, not {self.cfg.ELECTION_STATE}"
+        return None
