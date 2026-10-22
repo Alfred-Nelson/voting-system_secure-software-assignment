@@ -10,7 +10,7 @@
 """
 import time
 
-from . import passwords
+from . import passwords, totp
 
 
 class AuthError(Exception):
@@ -45,6 +45,7 @@ class Authenticator:
             self.audit.record("auth.rejected_single_factor", actor, "unknown",
                               {"has_password": bool(password), "has_totp": bool(code)})
             raise AuthError("password and one-time code are both required")
+        fc = self.keys.field_cipher()
         error = None   # raised only after the transaction commits, so failure counters persist
         with self.dbs.transaction("identity") as conn:
             row = conn.execute(f"SELECT * FROM {table} WHERE {lookup_col} = ?",  # nosec B608
@@ -61,5 +62,14 @@ class Authenticator:
                 elif not passwords.verify_password(password, row["password_hash"]):
                     self._fail(conn, table, row, actor, role, "bad password")
                     error = GENERIC
+                else:
+                    secret = fc.decrypt(row["totp_secret_enc"], "totp")
+                    counter = totp.verify(secret, code)
+                    if counter is None or counter <= row["last_totp_counter"]:
+                        self._fail(conn, table, row, actor, role, "bad or replayed one-time code")
+                        error = GENERIC
+                    else:
+                        conn.execute(f"UPDATE {table} SET failed_logins = 0, locked_until = 0, "  # nosec B608
+                                     "last_totp_counter = ? WHERE id = ?", (counter, row["id"]))
         if error:
             raise AuthError(error)
