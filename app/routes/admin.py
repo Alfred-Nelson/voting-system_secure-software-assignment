@@ -38,4 +38,12 @@ def mark_voted():
                                          str(d.get("channel", "station")), g.user["username"])
         return jsonify(ok=True)
     except VotingError as exc:
+            return _err(exc)
+
+@bp.post("/admin/tally")
+@require("tally.run")
+def run_tally():
+    try:
+        return jsonify(svc().election.run_tally(*_actor()))
+    except VotingError as exc:
         return _err(exc)

@@ -17,6 +17,7 @@ from .security.ratelimit import RateLimiter
 from .security.sessions import SessionStore
 from .voting.ledger import Ledger
 from .voting.service import ElectionService
+from .routes import admin, auth, ballots
 
 log = logging.getLogger("evote")
 
@@ -61,7 +62,6 @@ def create_app(config_object=Config, data_dir=None):
     if due:
         svc.monitor.alert("medium", "keys.rotation_due", f"Keys due for 90-day rotation: {due}")
 
-    from .routes import admin, auth, ballots
     for bp in (admin.bp, auth.bp, ballots.bp):
         app.register_blueprint(bp)
 
