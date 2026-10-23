@@ -246,6 +246,16 @@ def test_exclusion_is_deterministic_for_any_ballot_order():
     assert forward == backward
 
 
+def test_known_vector():
+    """Published-style test vector: fixed input -> fixed winners and digest."""
+    orders = ([["A", "C"]] * 6) + ([["B", "C"]] * 5) + ([["C", "A"]] * 4) + ([["D", "B"]] * 3)
+    res = count(orders, CANDS, 2)
+    # D excluded -> B reaches quota (8); B's surplus goes to C at 1/8; C excluded -> A elected
+    assert res["quota"] == 7
+    assert res["elected"] == ["B", "A"]
+    assert count(orders, CANDS, 2)["input_digest"] == res["input_digest"]
+
+
 def test_known_vector_with_surplus_then_exclusion():
     # D excluded -> B reaches quota 7 (8); B's surplus goes to C at 1/8; C excluded -> A elected.
     orders = [["A", "C"]] * 6 + [["B", "C"]] * 5 + [["C", "A"]] * 4 + [["D", "B"]] * 3
