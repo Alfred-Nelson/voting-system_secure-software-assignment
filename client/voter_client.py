@@ -9,6 +9,8 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 
+from app.voting import formality
+
 
 class ClientError(Exception):
     pass
@@ -80,6 +82,11 @@ class VoterClient:
         s, d = self.t.request("GET", "/api/election")
         self.election = self._check(s, d)
         return self.election
+
+    def check_formality(self, ballot):
+        e = self.election or self.load_election()
+        groups = {g["code"]: g["candidates"] for g in e["groups"]}
+        return formality.validate(ballot, groups, [c["id"] for c in e["candidates"]])
 
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
     def _load_wallet(self):
