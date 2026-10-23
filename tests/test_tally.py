@@ -178,6 +178,12 @@ def test_fewer_candidates_than_vacancies_elects_everyone_without_error():
     assert sorted(res["elected"]) == ["A", "B"]
 
 
+def test_excluded_candidate_never_elected():
+    orders = [["A", "B"]] * 9 + [["B"]] * 1
+    res = count(orders, CANDS, 1, excluded=["A"])
+    assert res["elected"] == ["B"] and res["excluded_before_count"] == ["A"]
+
+
 def test_excluded_candidate_is_never_used_to_fill_a_vacancy():
     orders = [["A"]] * 3 + [["B"]] + [["C"]] * 5
     res = count(orders, ["A", "B", "C"], 3, excluded=["C"])
