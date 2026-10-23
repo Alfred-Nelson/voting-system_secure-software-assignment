@@ -138,6 +138,10 @@ class VoterClient:
         s, d = self.t.request("POST", "/api/ballots", submission, headers)  # NO auth header
         return self._check(s, d)
 
+    def verify_receipt(self, code):
+        s, d = self.t.request("GET", f"/api/bulletin/{code}")
+        return self._check(s, d)
+
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
     def _save_wallet(self):
         if not self.wallet_path:
@@ -149,6 +153,7 @@ class VoterClient:
                                                 "spki": base64.b64encode(self.credential["spki"]).decode(),
                                                 "token": self.credential["token"]}))
         os.chmod(self.wallet_path, 0o600)
+
     def _load_wallet(self):
         if not self.wallet_path or not self.wallet_path.exists():
             return None
