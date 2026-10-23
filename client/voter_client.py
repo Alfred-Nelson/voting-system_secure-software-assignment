@@ -127,6 +127,17 @@ class VoterClient:
                 "token": self.credential["token"], "envelope": envelope,
                 "signature": base64.b64encode(sig).decode()}
 
+    def cast(self, ballot):
+        """Returns the receipt."""
+        if not self.credential:
+            self.obtain_credential()
+        return self._submit(self.build_submission(ballot))
+
+    def _submit(self, submission):
+        headers = {"X-Terminal-Id": self.terminal_id} if self.terminal_id else {}
+        s, d = self.t.request("POST", "/api/ballots", submission, headers)  # NO auth header
+        return self._check(s, d)
+
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
     def _save_wallet(self):
         if not self.wallet_path:
