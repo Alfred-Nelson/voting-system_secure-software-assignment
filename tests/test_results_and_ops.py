@@ -1,6 +1,15 @@
 """Election status rules and general hardening (results, backup and monitoring tests are added in later issues)."""
 
 
+# ---------------------------------------------------------------- hardening
+def test_security_headers(http):
+    r = http.get("/api/election")
+    assert "default-src 'self'" in r.headers["Content-Security-Policy"]
+    assert r.headers["X-Frame-Options"] == "DENY"
+    assert "max-age" in r.headers["Strict-Transport-Security"]
+    assert r.headers["Cache-Control"] == "no-store"
+
+
 def test_election_status_transitions_enforced(h, http):
     adm = h.staff("admin1")
     r = http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
