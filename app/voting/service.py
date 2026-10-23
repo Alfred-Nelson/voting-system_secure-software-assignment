@@ -11,7 +11,8 @@ from datetime import date, datetime, timezone
 
 from ..security import blind
 from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
-                               load_spki, sha256_hex)
+                               load_spki, sha256_hex, hybrid_decrypt, unpad_fixed, canonical_json)
+from . import formality, tally
 from .ledger import ballot_hash
 
 
@@ -253,3 +254,61 @@ class ElectionService:
         valid = self.keys.verify("receipt_sign", row["key_version"], row["signature"],
                                  f"{row['code']}|{row['issued_hour']}".encode())
         return {"found": True, "issued_hour": row["issued_hour"], "signature_valid": valid}
+    
+    # ------------------------------------------------------------ count
+    def run_tally(self, actor, role, recount=False):
+        if self.status() not in ("closed", "tallied"):
+            raise VotingError("polls must be closed before counting", 409)
+        self.flush_pool()
+        integrity = self.ledger.verify()
+        self.audit.record("ledger.verified", actor, role, integrity)
+        if not integrity["ok"]:
+            self.monitor.alert("critical", "ledger.tamper", "; ".join(integrity["problems"]))
+            raise VotingError("integrity check failed - count blocked: "
+                              + "; ".join(integrity["problems"]), 409)
+
+        groups, cands = self.ballot_paper()
+        group_map = {g["code"]: g["candidates"] for g in groups}
+        all_ids = [c["id"] for c in cands]
+        excluded = [c["id"] for c in cands if c["excluded"]]
+
+        with self.dbs.connect("ballot") as conn:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT envelope FROM ballots WHERE superseded = 0")]
+        secrets.SystemRandom().shuffle(rows)   # SR-09: break any storage ordering
+        orders, informal, undecryptable = [], 0, 0
+        for r in rows:
+            try:
+                plain = unpad_fixed(hybrid_decrypt(self.keys.unwrap_ballot_key,
+                                                   json.loads(r["envelope"])))
+                ballot = json.loads(plain)
+            except (CryptoError, ValueError):
+                undecryptable += 1
+                continue
+            res = formality.validate(ballot, group_map, all_ids)
+            if res.formal:
+                orders.append(res.order)
+            else:
+                informal += 1
+
+        result = tally.count(orders, all_ids, self.cfg.VACANCIES, excluded)
+        result.update({"informal_ballots": informal, "undecryptable_ballots": undecryptable,
+                       "state": self.cfg.ELECTION_STATE, "ledger_head": self.ledger.head()["head"],
+                       "recount": recount,
+                       "counted_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        version, sig = self.keys.sign("results_sign", canonical_json(result))
+        with self.dbs.connect("ballot") as conn:
+            conn.execute("INSERT INTO results (payload, key_version, signature) VALUES (?,?,?)",
+                         (json.dumps(result), version, sig))
+        if self.status() != "tallied":
+            self.set("status", "tallied")
+        return {"result": result, "key_version": version, "signature": sig}
+
+    def latest_result(self):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT * FROM results ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        return {"result": json.loads(row["payload"]), "key_version": row["key_version"],
+                "signature": row["signature"],
+                "public_key_pem": self.keys.public_key_pem("results_sign", row["key_version"])}
