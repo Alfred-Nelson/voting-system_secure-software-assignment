@@ -261,4 +261,8 @@ class ElectionService:
         self.flush_pool()
         integrity = self.ledger.verify()
         self.audit.record("ledger.verified", actor, role, integrity)
+        if not integrity["ok"]:
+            self.monitor.alert("critical", "ledger.tamper", "; ".join(integrity["problems"]))
+            raise VotingError("integrity check failed - count blocked: "
+                              + "; ".join(integrity["problems"]), 409)
         return integrity
