@@ -3,7 +3,9 @@
 Tests are added one checklist item at a time; each section names the item it covers.
 """
 import json
+import re
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -397,4 +399,90 @@ def test_rejected_ballot_is_not_stored(svc, open_election):
     with pytest.raises(VotingError):
         open_election.submit_ballot(cred, token, env, b64e(b"\x00" * 64))
     assert _pool(svc) == []
+
+
+# ---- Task 7: _issue_receipt - code from ballot hash, hour-only time, signed -------------
+def _receipts(svc):
+    with svc.dbs.connect("ballot") as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM receipts")]
+
+
+def _utc_hour():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00Z")
+
+
+def test_submit_returns_a_receipt(svc, open_election):
+    receipt = open_election.submit_ballot(*make_submission(svc))
+    assert set(receipt) == {"receipt", "issued_hour", "key_version", "signature"}
+
+
+def test_receipt_code_is_derived_from_the_ballot_hash(svc, open_election):
+    cred, token, env, sig = make_submission(svc)
+    receipt = open_election.submit_ballot(cred, token, env, sig)
+    bh = _hash_of(cred, env, sig)
+    assert re.fullmatch(r"([0-9A-F]{4}-){4}[0-9A-F]{4}", receipt["receipt"])
+    assert receipt["receipt"].replace("-", "") == bh[:20].upper()
+
+
+def test_receipt_time_is_the_hour_only(svc, open_election):                         # SR-09
+    before = _utc_hour()
+    receipt = open_election.submit_ballot(*make_submission(svc))
+    after = _utc_hour()
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:00Z", receipt["issued_hour"])
+    assert receipt["issued_hour"] in (before, after)         # no minutes, seconds or millis
+
+
+def test_receipt_signature_verifies(svc, open_election):
+    receipt = open_election.submit_ballot(*make_submission(svc))
+    msg = f"{receipt['receipt']}|{receipt['issued_hour']}".encode()
+    assert svc.keys.verify("receipt_sign", receipt["key_version"], receipt["signature"], msg)
+
+
+def test_receipt_signature_fails_if_code_or_hour_changed(svc, open_election):
+    receipt = open_election.submit_ballot(*make_submission(svc))
+    ver, sig = receipt["key_version"], receipt["signature"]
+    assert not svc.keys.verify("receipt_sign", ver, sig,
+                               f"AAAA-AAAA-AAAA-AAAA-AAAA|{receipt['issued_hour']}".encode())
+    assert not svc.keys.verify("receipt_sign", ver, sig,
+                               f"{receipt['receipt']}|2000-01-01T00:00Z".encode())
+
+
+def test_receipt_is_recorded_for_the_bulletin_board(svc, open_election):
+    receipt = open_election.submit_ballot(*make_submission(svc))
+    (row,) = _receipts(svc)
+    assert (row["code"], row["issued_hour"], row["key_version"], row["signature"]) == (
+        receipt["receipt"], receipt["issued_hour"], receipt["key_version"], receipt["signature"])
+
+
+def test_receipt_table_has_no_exact_time_or_link_to_voter(svc):                    # SR-07 / SR-09
+    with svc.dbs.connect("ballot") as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(receipts)")}
+    assert cols == {"code", "issued_hour", "key_version", "signature"}
+
+
+def test_each_submission_gets_its_own_receipt(svc, open_election):
+    key, cred, token = make_credential(svc, with_key=True)
+    codes = []
+    for text in (b"first", b"second"):                     # a re-vote gets a fresh receipt
+        env = make_envelope(svc, text)
+        codes.append(open_election.submit_ballot(cred, token, env,
+                                                 sign_envelope(key, env))["receipt"])
+    assert codes[0] != codes[1]
+    assert sorted(r["code"] for r in _receipts(svc)) == sorted(codes)
+
+
+def test_no_receipt_for_rejected_or_replayed_ballots(svc, open_election):
+    cred, token, env, sig = make_submission(svc)
+    with pytest.raises(VotingError):
+        open_election.submit_ballot(cred, token, env, b64e(b"\x00" * 64))
+    assert _receipts(svc) == []
+    open_election.submit_ballot(cred, token, env, sig)
+    with pytest.raises(VotingError, match="duplicate"):
+        open_election.submit_ballot(cred, token, env, sig)
+    assert len(_receipts(svc)) == 1
+
+
+def test_receipt_reveals_nothing_about_the_vote(svc, open_election):
+    receipt = open_election.submit_ballot(*make_submission(svc, b'{"atl":{"A":1}}'))
+    assert "atl" not in json.dumps(receipt)
 

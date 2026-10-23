@@ -6,7 +6,7 @@ Flow:
 """
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from ..security import blind
 from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
@@ -197,3 +197,16 @@ class ElectionService:
             conn.execute("INSERT INTO ballot_pool (id, credential_hash, envelope, signature, "
                          "ballot_hash) VALUES (?,?,?,?,?)",
                          (str(uuid.uuid4()), credential_hash, envelope_json, signature_b64, bh))
+            receipt = self._issue_receipt(conn, bh)
+        # Nothing is audited per ballot: a per-ballot audit entry would put a timestamp
+        # next to each submission and let someone line it up with logins (SR-07, SR-09).
+        return receipt
+
+    def _issue_receipt(self, conn, bh):
+        """SR-15: receipt code derived from the ballot hash; reveals nothing about
+        the vote. Coarse (hourly) timestamp only, to respect SR-09."""
+        code = "-".join(bh[i:i + 4].upper() for i in range(0, 20, 4))
+        hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00Z")
+        version, sig = self.keys.sign("receipt_sign", f"{code}|{hour}".encode())
+        conn.execute("INSERT INTO receipts VALUES (?,?,?,?)", (code, hour, version, sig))
+        return {"receipt": code, "issued_hour": hour, "key_version": version, "signature": sig}
