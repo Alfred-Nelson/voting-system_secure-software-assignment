@@ -3,6 +3,11 @@
 The browser UI does exactly the same steps with WebCrypto. This Python version
 is used by the unit tests, the CLI demo and overseas mission terminals.
 """
+import base64
+import json
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
 
 
 class ClientError(Exception):
@@ -42,3 +47,23 @@ class HttpTransport:
             return r.status_code, r.json()
         except ValueError:
             return r.status_code, {}
+
+
+# ------------------------------------------------------------------ client
+class VoterClient:
+    def __init__(self, transport, wallet_path=None, queue_path=None, terminal_id=None):
+        self.t = transport
+        self.token = None
+        self.election = None
+        self.wallet_path = Path(wallet_path) if wallet_path else None
+        self.queue_path = Path(queue_path) if queue_path else None
+        self.terminal_id = terminal_id
+        self.credential = self._load_wallet()
+
+    # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
+    def _load_wallet(self):
+        if not self.wallet_path or not self.wallet_path.exists():
+            return None
+        w = json.loads(self.wallet_path.read_text())
+        return {"key": serialization.load_pem_private_key(w["key"].encode(), None),
+                "spki": base64.b64decode(w["spki"]), "token": w["token"]}
