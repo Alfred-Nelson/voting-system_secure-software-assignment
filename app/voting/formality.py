@@ -49,3 +49,44 @@ def _sequence(marks):
         seq.append(by_number[n][0])
         n += 1
     return seq, by_number
+
+
+def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
+    """
+    ballot     : {"atl": {"A": 1, ...}, "btl": {"C01": 1, ...}}
+    groups     : {"A": ["C01", "C02"], ...}  (candidates of each group in order)
+    candidates : ["C01", "C02", ..., "C07"]   (all candidates)
+    """
+    if not isinstance(ballot, dict):
+        return FormalityResult(False, errors=["ballot must be an object"])
+    errors = []
+    atl = _clean(ballot.get("atl"), set(groups), "Above the line", errors)
+    btl = _clean(ballot.get("btl"), set(candidates), "Below the line", errors)
+    if errors:
+        return FormalityResult(False, errors=errors)
+
+    btl_needed = min(6, len(candidates))
+
+    # ---- below the line first (takes precedence when formal)
+    if btl:
+        seq, by_number = _sequence(btl)
+        if len(seq) >= btl_needed:
+            return FormalityResult(True, "btl", seq)
+        dupes = [n for n, keys in by_number.items() if len(keys) > 1 and n <= btl_needed]
+        msg = (f"Below the line: number at least 1 to {btl_needed} with no repeats or gaps")
+        if dupes:
+            msg += f" (number {min(dupes)} is used more than once)"
+        if not atl:
+            return FormalityResult(False, errors=[msg])
+
+    # ---- above the line
+    if atl:
+        seq, by_number = _sequence(atl)
+        if not seq:
+            reason = ("the number 1 appears in more than one box" if len(by_number.get(1, [])) > 1
+                      else "there is no number 1")
+            return FormalityResult(False, errors=[f"Above the line: informal because {reason}"])
+        order = [cid for g in seq for cid in groups[g]]
+        return FormalityResult(True, "atl", order)
+
+    return FormalityResult(False, errors=["The ballot is blank"])
