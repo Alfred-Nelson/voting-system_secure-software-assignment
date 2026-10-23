@@ -83,3 +83,10 @@ def test_modified_ciphertext_rejected(h, http):                             # SR
     sub["envelope"]["ciphertext"] = base64.b64encode(bytes(ct)).decode()
     r = http.post("/api/ballots", json=sub)
     assert r.status_code == 400 and "signature" in r.get_json()["error"]
+
+
+def test_wrong_size_envelope_rejected(h, http):                              # SR-09
+    v, sub = _submission(h)
+    sub["envelope"]["ciphertext"] = base64.b64encode(b"x" * 100).decode()
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 400
