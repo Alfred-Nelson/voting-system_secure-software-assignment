@@ -7,7 +7,7 @@ Flow:
 from datetime import date
 
 from ..security import blind
-from ..security.crypto import CryptoError
+from ..security.crypto import CryptoError, b64d, load_spki
 from .ledger import ballot_hash
 
 
@@ -153,3 +153,17 @@ class ElectionService:
             conn.execute("UPDATE voters SET voted_channel = ? WHERE id = ?", (channel, voter["id"]))
         self.audit.record("vote.marked_offline", staff_user, "employee",
                           {"voter": voter["id"], "channel": channel})
+
+    # ------------------------------------------------------------ ballot side (anonymous)
+    def submit_ballot(self, credential_b64, token_hex, envelope, signature_b64):
+        if self.status() != "open":
+            raise VotingError("voting is not open", 409)
+        try:
+            spki = b64d(credential_b64)
+            load_spki(spki)
+            n, e = self.keys.blind_public()
+            token = int(token_hex, 16)
+            if not blind.verify(blind.message_int(spki, n), token, n, e):
+                raise VotingError("credential was not issued by the AEC", 403)
+        except (TypeError, ValueError):
+            raise VotingError("malformed ballot submission")
