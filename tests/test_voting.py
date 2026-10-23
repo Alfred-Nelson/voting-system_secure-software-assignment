@@ -12,6 +12,15 @@ def test_voting_closed_before_polls_open(h):
         v.cast(BALLOT)
 
 
+@pytest.mark.parametrize("enrol,reason", [("NSW1000009", "under 18"),
+                                          ("NSW1000010", "not on the electoral roll"),
+                                          ("VIC2000001", "enrolled in VIC")])
+def test_ineligible_voters_refused(h, enrol, reason):                        # SR-03
+    h.open_polls()
+    with pytest.raises(ClientError, match=reason):
+        h.voter(enrol).cast(BALLOT)
+
+
 def test_pii_encrypted_in_identity_db(svc, creds):                          # SR-06
     raw = (svc.dbs.paths["identity"]).read_bytes()
     assert b"Aisha Rahman" not in raw and b"George St" not in raw and b"NSW1000001" not in raw
