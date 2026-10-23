@@ -51,6 +51,8 @@ class ElectionService:
         old = self.status()
         if new_status not in allowed.get(old, set()):
             raise VotingError(f"cannot change election from '{old}' to '{new_status}'")
+        if new_status == "closed":
+            self.flush_pool()          # last partial mixing batch enters the ledger
         self.set("status", new_status)
         self.audit.record("election.status_changed", actor, role,
                           {"before": old, "after": new_status})
