@@ -93,11 +93,12 @@ def test_surplus_transfer_elects_second_candidate():
 
 def test_transfer_value_is_surplus_over_total_inclusive_of_all_papers():
     # quota 4, A has 6 -> surplus 2, value 2/6 = 1/3 applied to every paper.
-    # B = 2 + 4/3 = 10/3 < 4, so B is NOT elected (a value of 1/2 would wrongly elect B).
-    orders = [["A", "B"]] * 4 + [["A", "C"]] * 2 + [["B"]] * 2 + [["C"]] + [["D"]]
-    res = count(orders, CANDS, 2)
+    # C = 1 + 4/3 = 7/3 and B = 2 + 2/3 = 8/3, so C is the lowest and B takes the last seat.
+    # A wrong value of 1/2 would give C = 3 = B, and the tie-break would exclude B instead.
+    orders = [["A", "C"]] * 4 + [["A", "B"]] * 2 + [["C"]] + [["B"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
     assert res["quota"] == 4
-    assert res["elected"] == ["A"]
+    assert res["elected"] == ["A", "B"]
 
 
 def test_transfer_can_push_candidate_over_quota_with_fractional_weights():
@@ -125,8 +126,43 @@ def test_election_stops_when_vacancies_are_filled():
 
 
 def test_surplus_papers_with_no_further_preference_are_exhausted_safely():
+    # A's surplus papers have no further preference and exhaust; C and D are excluded
+    # (no votes) and B fills the remaining vacancy.
     orders = [["A"]] * 8 + [["B"]] * 2
-    assert count(orders, CANDS, 2)["elected"] == ["A"]
+    assert count(orders, CANDS, 2)["elected"] == ["A", "B"]
+
+
+def test_remaining_vacancy_filled_by_last_continuing_candidate_below_quota():
+    # quota 4. A is elected; C is excluded; B (3, below quota) fills the last vacancy.
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["C"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
+    assert res["quota"] == 4
+    assert res["elected"] == ["A", "B"]
+
+
+def test_remaining_vacancies_are_filled_highest_total_first_then_candidate_id():
+    # quota 3. C is elected; A (1) and B (2) are both needed for the 2 remaining seats.
+    orders = [["C"]] * 5 + [["B"]] * 2 + [["A"]]
+    res = count(orders, ["A", "B", "C"], 3)
+    assert res["quota"] == 3
+    assert res["elected"] == ["C", "B", "A"]
+
+
+def test_equal_totals_when_filling_remaining_vacancies_use_candidate_id():
+    orders = [["C"]] * 4 + [["B"]] + [["A"]]
+    res = count(orders, ["A", "B", "C"], 3)
+    assert res["elected"] == ["C", "A", "B"]
+
+
+def test_fewer_candidates_than_vacancies_elects_everyone_without_error():
+    res = count([["A"], ["B"], ["A"]], ["A", "B"], 5)
+    assert sorted(res["elected"]) == ["A", "B"]
+
+
+def test_excluded_candidate_is_never_used_to_fill_a_vacancy():
+    orders = [["A"]] * 3 + [["B"]] + [["C"]] * 5
+    res = count(orders, ["A", "B", "C"], 3, excluded=["C"])
+    assert res["elected"] == ["A", "B"]
 
 
 def test_lowest_candidate_is_excluded_and_papers_transfer():

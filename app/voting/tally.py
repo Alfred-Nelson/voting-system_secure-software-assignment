@@ -53,6 +53,11 @@ def count(preference_orders, candidates, vacancies, excluded=()):
             pending_surplus.append((c, t[c]))
         if len(elected) >= vacancies:
             break
+        if len(elected) + len(continuing) <= vacancies:
+            for c in sorted(continuing, key=lambda c: (-t[c], c)):
+                elected.append(c)
+            continuing.clear()
+            break
         if pending_surplus:
             c, value = pending_surplus.pop(0)
             surplus = value - quota
