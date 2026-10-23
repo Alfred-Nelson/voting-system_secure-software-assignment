@@ -43,6 +43,7 @@ def count(preference_orders, candidates, vacancies, excluded=()):
         return {c: sum((p.weight for p in piles[c]), Fraction(0)) for c in continuing}
 
     pending_surplus = []
+    prev_totals = {c: Fraction(0) for c in candidates}
     while len(elected) < vacancies and continuing:
         t = totals()
         newly = sorted((c for c in continuing if t[c] >= quota), key=lambda c: (-t[c], c))
@@ -64,8 +65,13 @@ def count(preference_orders, candidates, vacancies, excluded=()):
             else:
                 piles[c] = []
             continue
-        # No one is over quota and nothing is left to transfer; exclusion is added in a later task.
-        break
+        # Fixed tie-break: lowest total, then lowest previous-round total, then candidate id.
+        lowest = min(continuing, key=lambda c: (t[c], prev_totals.get(c, 0), c))
+        continuing.discard(lowest)
+        papers, piles[lowest] = piles[lowest], []
+        for p in papers:
+            place(p)
+        prev_totals = t
 
     # Partial result: the remaining fields are added in later tasks.
     return {"input_digest": digest, "quota": quota, "elected": elected}
