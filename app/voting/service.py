@@ -4,11 +4,12 @@ Flow:
   identity side  : login (MFA) -> eligibility check -> double-vote check ->
                    blind-sign the voter's anonymous credential
 """
+import json
 from datetime import date
 
 from ..security import blind
 from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
-                               load_spki)
+                               load_spki, sha256_hex)
 from .ledger import ballot_hash
 
 
@@ -178,3 +179,12 @@ class ElectionService:
             raise VotingError(f"ballot rejected: {exc}", 400)
         except (TypeError, ValueError):
             raise VotingError("malformed ballot submission")
+
+        credential_hash = sha256_hex(spki)
+        envelope_json = json.dumps(envelope, sort_keys=True, separators=(",", ":"))
+        bh = ballot_hash(credential_hash, envelope_json, signature_b64)
+        with self.dbs.transaction("ballot") as conn:
+            for table in ("ballots", "ballot_pool"):
+                if conn.execute(f"SELECT 1 FROM {table} WHERE ballot_hash = ?",  # nosec B608
+                                (bh,)).fetchone():
+                    raise VotingError("duplicate ballot (replay)", 409)

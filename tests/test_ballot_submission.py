@@ -2,13 +2,17 @@
 
 Tests are added one checklist item at a time; each section names the item it covers.
 """
+import json
+import uuid
+
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from app.security import blind
 from app.security.crypto import (b64d, b64e, ecdsa_sign_raw, envelope_signing_bytes,
-                                 hybrid_encrypt, pad_fixed)
+                                 hybrid_encrypt, pad_fixed, sha256_hex)
+from app.voting.ledger import ballot_hash
 from app.voting.service import VotingError
 
 
@@ -215,3 +219,52 @@ def test_rejection_is_audited_anonymously(svc, open_election):                  
 def test_valid_ballot_is_not_audited_as_rejected(svc, open_election):
     open_election.submit_ballot(*make_submission(svc))
     assert _rejections(svc) == []
+
+
+# ---- Task 4: refuse a ballot_hash already in ballots or ballot_pool (replay) ------------
+def _hash_of(cred, env, sig):
+    envelope_json = json.dumps(env, sort_keys=True, separators=(",", ":"))
+    return ballot_hash(sha256_hex(b64d(cred)), envelope_json, sig)
+
+
+def _store(svc, table, cred, env, sig):
+    """Put a ballot straight into `table`, as an earlier accepted submission would be."""
+    envelope_json = json.dumps(env, sort_keys=True, separators=(",", ":"))
+    with svc.dbs.transaction("ballot") as conn:
+        conn.execute(f"INSERT INTO {table} (id, credential_hash, envelope, signature, "  # nosec B608
+                     "ballot_hash) VALUES (?,?,?,?,?)",
+                     (str(uuid.uuid4()), sha256_hex(b64d(cred)), envelope_json, sig,
+                      _hash_of(cred, env, sig)))
+
+
+@pytest.mark.parametrize("table", ["ballot_pool", "ballots"])
+def test_replayed_ballot_refused(svc, open_election, table):
+    cred, token, env, sig = make_submission(svc)
+    _store(svc, table, cred, env, sig)
+    with pytest.raises(VotingError, match="duplicate ballot") as exc:
+        open_election.submit_ballot(cred, token, env, sig)
+    assert exc.value.status == 409
+
+
+def test_ballot_hash_ignores_envelope_key_order(svc, open_election):
+    # The hash is taken over canonical JSON, so re-ordering the fields is still a replay.
+    cred, token, env, sig = make_submission(svc)
+    _store(svc, "ballot_pool", cred, env, sig)
+    reordered = {k: env[k] for k in reversed(list(env))}
+    with pytest.raises(VotingError, match="duplicate ballot"):
+        open_election.submit_ballot(cred, token, reordered, sig)
+
+
+def test_other_stored_ballots_do_not_block_a_new_one(svc, open_election):
+    cred, _, env, sig = make_submission(svc)
+    _store(svc, "ballot_pool", cred, env, sig)
+    open_election.submit_ballot(*make_submission(svc))
+
+
+def test_same_credential_with_a_new_envelope_is_not_a_replay(svc, open_election):  # SR-30
+    key, cred, token = make_credential(svc, with_key=True)
+    first = make_envelope(svc, b'{"atl":{"A":1}}')
+    _store(svc, "ballots", cred, first, sign_envelope(key, first))
+    second = make_envelope(svc, b'{"atl":{"B":1}}')      # a re-vote: new ciphertext, new hash
+    open_election.submit_ballot(cred, token, second, sign_envelope(key, second))
+
