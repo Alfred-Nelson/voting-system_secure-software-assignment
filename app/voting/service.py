@@ -253,3 +253,12 @@ class ElectionService:
         valid = self.keys.verify("receipt_sign", row["key_version"], row["signature"],
                                  f"{row['code']}|{row['issued_hour']}".encode())
         return {"found": True, "issued_hour": row["issued_hour"], "signature_valid": valid}
+    
+    # ------------------------------------------------------------ count
+    def run_tally(self, actor, role, recount=False):
+        if self.status() not in ("closed", "tallied"):
+            raise VotingError("polls must be closed before counting", 409)
+        self.flush_pool()
+        integrity = self.ledger.verify()
+        self.audit.record("ledger.verified", actor, role, integrity)
+        return integrity
