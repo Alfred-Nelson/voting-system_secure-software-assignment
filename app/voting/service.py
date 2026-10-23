@@ -11,7 +11,8 @@ from datetime import date, datetime, timezone
 
 from ..security import blind
 from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
-                               load_spki, sha256_hex, hybrid_decrypt, unpad_fixed)
+                               load_spki, sha256_hex, hybrid_decrypt, unpad_fixed, canonical_json)
+from . import formality, tally
 from .ledger import ballot_hash
 
 
@@ -291,5 +292,14 @@ class ElectionService:
                 informal += 1
 
         result = tally.count(orders, all_ids, self.cfg.VACANCIES, excluded)
-        return {"integrity": integrity, "result": result, "informal_ballots": informal,
-                "undecryptable_ballots": undecryptable}
+        result.update({"informal_ballots": informal, "undecryptable_ballots": undecryptable,
+                       "state": self.cfg.ELECTION_STATE, "ledger_head": self.ledger.head()["head"],
+                       "recount": recount,
+                       "counted_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        version, sig = self.keys.sign("results_sign", canonical_json(result))
+        with self.dbs.connect("ballot") as conn:
+            conn.execute("INSERT INTO results (payload, key_version, signature) VALUES (?,?,?)",
+                         (json.dumps(result), version, sig))
+        if self.status() != "tallied":
+            self.set("status", "tallied")
+        return {"result": result, "key_version": version, "signature": sig}
