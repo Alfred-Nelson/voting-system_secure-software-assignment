@@ -37,3 +37,15 @@ def _clean(marks, valid_keys, label, errors):
             continue
         out[key] = value
     return out
+
+
+def _sequence(marks):
+    """Return keys in order 1,2,3.. stopping at the first gap or duplicate."""
+    by_number = {}
+    for key, n in marks.items():
+        by_number.setdefault(n, []).append(key)
+    seq, n = [], 1
+    while n in by_number and len(by_number[n]) == 1:
+        seq.append(by_number[n][0])
+        n += 1
+    return seq, by_number
