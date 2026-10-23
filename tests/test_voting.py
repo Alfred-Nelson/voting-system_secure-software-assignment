@@ -1,4 +1,6 @@
 """SR-06 - personal data encrypted at rest (the voting-flow tests are added in later issues)."""
+import base64
+
 import pytest
 
 from client.voter_client import ClientError
@@ -72,3 +74,12 @@ def test_forged_credential_rejected(h, http):                               # SR
     sub["token"] = format(int(sub["token"], 16) ^ 0xFF, "x")
     r = http.post("/api/ballots", json=sub)
     assert r.status_code == 403
+
+
+def test_modified_ciphertext_rejected(h, http):                             # SR-10
+    _, sub = _submission(h)
+    ct = bytearray(base64.b64decode(sub["envelope"]["ciphertext"]))
+    ct[10] ^= 1
+    sub["envelope"]["ciphertext"] = base64.b64encode(bytes(ct)).decode()
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 400 and "signature" in r.get_json()["error"]
