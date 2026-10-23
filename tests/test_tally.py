@@ -2,9 +2,19 @@ import hashlib
 import json
 from fractions import Fraction
 
+from app.voting import tally
 from app.voting.tally import Paper, count
 
 CANDS = ["A", "B", "C", "D"]
+
+
+def test_module_docstring_documents_method_and_simplifications():
+    doc = " ".join((tally.__doc__ or "").lower().split())
+    assert doc, "app/voting/tally.py needs a module docstring"
+    for phrase in ("droop quota", "weighted inclusive gregory", "fraction", "sorted",
+                   "digest", "lower previous-round total", "candidate id",
+                   "simplification", "truncated", "bulk exclusion"):
+        assert phrase in doc, f"docstring should mention {phrase!r}"
 
 
 def test_paper_starts_with_full_weight_at_first_preference():
