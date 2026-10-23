@@ -35,3 +35,8 @@ def test_btl_takes_precedence_when_both_formal():
     b = {"atl": {"C": 1}, "btl": {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5, "C2": 6}}
     res = validate(b, GROUPS, CANDS)
     assert res.used == "btl" and any("below-the-line vote is used" in w for w in res.warnings)
+
+
+def test_informal_btl_falls_back_to_atl():
+    res = validate({"atl": {"C": 1}, "btl": {"A1": 1}}, GROUPS, CANDS)
+    assert res.formal and res.used == "atl"
