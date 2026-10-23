@@ -58,3 +58,17 @@ def test_concurrent_credential_requests_only_one_succeeds(h, svc):        # SR-0
     for t in threads:
         t.join()
     assert results.count("ok") == 1 and results.count("refused") == 9
+
+
+def _submission(h):
+    h.open_polls()
+    v = h.voter("NSW1000001")
+    v.obtain_credential()
+    return v, v.build_submission(BALLOT)
+
+
+def test_forged_credential_rejected(h, http):                               # SR-07
+    _, sub = _submission(h)
+    sub["token"] = format(int(sub["token"], 16) ^ 0xFF, "x")
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 403
