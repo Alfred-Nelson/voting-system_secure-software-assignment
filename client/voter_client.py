@@ -5,10 +5,13 @@ is used by the unit tests, the CLI demo and overseas mission terminals.
 """
 import base64
 import json
+import os
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
+from app.security import blind
 from app.voting import formality
 
 
@@ -88,7 +91,38 @@ class VoterClient:
         groups = {g["code"]: g["candidates"] for g in e["groups"]}
         return formality.validate(ballot, groups, [c["id"] for c in e["candidates"]])
 
+    def obtain_credential(self):
+        """SR-07: blind-signature credential issuance."""
+        e = self.election or self.load_election()
+        n, ex = int(e["keys"]["blind_n"], 16), int(e["keys"]["blind_e"], 16)
+        key = ec.generate_private_key(ec.SECP256R1())
+        spki = key.public_key().public_bytes(serialization.Encoding.DER,
+                                             serialization.PublicFormat.SubjectPublicKeyInfo)
+        m = blind.message_int(spki, n)
+        blinded, r = blind.blind(m, n, ex)
+        s, d = self.t.request("POST", "/api/voter/credential", {"blinded": format(blinded, "x")},
+                              self._auth())
+        sig = blind.unblind(int(self._check(s, d)["blind_signature"], 16), r, n)
+        if not blind.verify(m, sig, n, ex):
+            raise ClientError("authority returned an invalid blind signature")
+        self.credential = {"key": key, "spki": spki, "token": format(sig, "x")}
+        self._save_wallet()
+        # Log out before voting - the ballot is sent with no session at all.
+        self.t.request("POST", "/api/auth/logout", None, self._auth())
+        self.token = None
+        return self.credential
+
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
+    def _save_wallet(self):
+        if not self.wallet_path:
+            return
+        pem = self.credential["key"].private_bytes(serialization.Encoding.PEM,
+                                                   serialization.PrivateFormat.PKCS8,
+                                                   serialization.NoEncryption())
+        self.wallet_path.write_text(json.dumps({"key": pem.decode(),
+                                                "spki": base64.b64encode(self.credential["spki"]).decode(),
+                                                "token": self.credential["token"]}))
+        os.chmod(self.wallet_path, 0o600)
     def _load_wallet(self):
         if not self.wallet_path or not self.wallet_path.exists():
             return None
