@@ -266,17 +266,30 @@ class ElectionService:
             raise VotingError("integrity check failed - count blocked: "
                               + "; ".join(integrity["problems"]), 409)
 
+        groups, cands = self.ballot_paper()
+        group_map = {g["code"]: g["candidates"] for g in groups}
+        all_ids = [c["id"] for c in cands]
+        excluded = [c["id"] for c in cands if c["excluded"]]
+
         with self.dbs.connect("ballot") as conn:
             rows = [dict(r) for r in conn.execute(
                 "SELECT envelope FROM ballots WHERE superseded = 0")]
         secrets.SystemRandom().shuffle(rows)   # SR-09: break any storage ordering
-        ballots, undecryptable = [], 0
+        orders, informal, undecryptable = [], 0, 0
         for r in rows:
             try:
                 plain = unpad_fixed(hybrid_decrypt(self.keys.unwrap_ballot_key,
                                                    json.loads(r["envelope"])))
-                ballots.append(json.loads(plain))
+                ballot = json.loads(plain)
             except (CryptoError, ValueError):
                 undecryptable += 1
-        return {"integrity": integrity, "decrypted_ballots": len(ballots),
+                continue
+            res = formality.validate(ballot, group_map, all_ids)
+            if res.formal:
+                orders.append(res.order)
+            else:
+                informal += 1
+
+        result = tally.count(orders, all_ids, self.cfg.VACANCIES, excluded)
+        return {"integrity": integrity, "result": result, "informal_ballots": informal,
                 "undecryptable_ballots": undecryptable}
