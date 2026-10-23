@@ -1,3 +1,17 @@
+"""Deterministic, reproducible Single Transferable Vote count (SR-13).
+
+* Droop quota, Weighted Inclusive Gregory Method surplus transfers (the method
+  used for the Australian Senate since 2016).
+* Exact rational arithmetic (fractions.Fraction) - no floating point, so the
+  same ballots always produce byte-identical results on any machine.
+* Ballots are sorted before counting and a digest of the input is included in
+  the output, so anyone re-running the count can prove they used the same data.
+* Ties are broken by a fixed, published rule (lower previous-round total, then
+  candidate id), never randomly.
+
+Simplification vs. the real Senate scrutiny: votes are not truncated to whole
+numbers after each transfer and bulk exclusion is not used.
+"""
 import hashlib
 from fractions import Fraction
 
