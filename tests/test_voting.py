@@ -1,4 +1,24 @@
 """SR-06 - personal data encrypted at rest (the voting-flow tests are added in later issues)."""
+import pytest
+
+from client.voter_client import ClientError
+
+BALLOT = {"atl": {"A": 1, "B": 2, "C": 3}}
+
+
+def test_voting_closed_before_polls_open(h):
+    v = h.voter("NSW1000001")
+    with pytest.raises(ClientError, match="not open"):
+        v.cast(BALLOT)
+
+
+@pytest.mark.parametrize("enrol,reason", [("NSW1000009", "under 18"),
+                                          ("NSW1000010", "not on the electoral roll"),
+                                          ("VIC2000001", "enrolled in VIC")])
+def test_ineligible_voters_refused(h, enrol, reason):                        # SR-03
+    h.open_polls()
+    with pytest.raises(ClientError, match=reason):
+        h.voter(enrol).cast(BALLOT)
 
 
 def test_pii_encrypted_in_identity_db(svc, creds):                          # SR-06
