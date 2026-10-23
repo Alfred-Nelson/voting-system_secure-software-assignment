@@ -11,6 +11,7 @@ from app import create_app                    # noqa: E402
 from app.config import TestConfig             # noqa: E402
 from app.security import totp                 # noqa: E402
 from app.seed import seed                     # noqa: E402
+from client.voter_client import FlaskTransport, VoterClient  # noqa: E402
 
 
 class _Cfg(TestConfig):
@@ -63,6 +64,11 @@ class Helper:
         assert r.status_code == 200, r.get_json()
         self._headers[user] = {"Authorization": "Bearer " + r.get_json()["token"]}
         return self._headers[user]
+
+    def voter(self, enrol, **kw):
+        v = VoterClient(FlaskTransport(self.http), **kw)
+        v.login(enrol, self.creds["voter_password"], self.code(enrol))
+        return v
 
     def open_polls(self):
         r = self.http.post("/api/admin/election/status", json={"status": "open"},
