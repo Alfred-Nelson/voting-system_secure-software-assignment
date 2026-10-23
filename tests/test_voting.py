@@ -35,6 +35,27 @@ def test_ineligible_voters_refused(h, enrol, reason):                        # S
         h.voter(enrol).cast(BALLOT)
 
 
+def test_second_credential_refused(h):                                       # SR-04
+    h.open_polls()
+    h.voter("NSW1000001").cast(BALLOT)
+    with pytest.raises(ClientError, match="already voted"):
+        h.voter("NSW1000001").cast(BALLOT)
+
+
+def test_cross_channel_double_vote_blocked(h, http, svc):                    # SR-04
+    h.open_polls()
+    off = h.staff("officer1")
+    assert http.post("/api/station/mark-voted", json={"enrolment_id": "NSW1000003"},
+                     headers=off).status_code == 200
+    with pytest.raises(ClientError, match="already voted"):
+        h.voter("NSW1000003").cast(BALLOT)
+    h.voter("NSW1000004").cast(BALLOT)
+    r = http.post("/api/station/mark-voted", json={"enrolment_id": "NSW1000004", "channel": "postal"},
+                  headers=off)
+    assert r.status_code == 409
+    assert any(a["kind"] == "double_vote" for a in svc.monitor.alerts())
+
+
 def test_pii_encrypted_in_identity_db(svc, creds):                          # SR-06
     raw = (svc.dbs.paths["identity"]).read_bytes()
     assert b"Aisha Rahman" not in raw and b"George St" not in raw and b"NSW1000001" not in raw
