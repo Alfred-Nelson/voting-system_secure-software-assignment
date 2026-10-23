@@ -235,3 +235,19 @@ class ElectionService:
         version, sig = self.keys.sign("receipt_sign", f"{code}|{hour}".encode())
         conn.execute("INSERT INTO receipts VALUES (?,?,?,?)", (code, hour, version, sig))
         return {"receipt": code, "issued_hour": hour, "key_version": version, "signature": sig}
+
+    def bulletin(self):
+        """Public bulletin board. Deliberately does NOT show whether a receipt
+        was superseded by a re-vote - otherwise a coercer could check (SR-30)."""
+        with self.dbs.connect("ballot") as conn:
+            rows = conn.execute("SELECT code, issued_hour FROM receipts ORDER BY code").fetchall()
+        return [dict(r) for r in rows]
+
+    def check_receipt(self, code):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT * FROM receipts WHERE code = ?", (code.upper(),)).fetchone()
+        if not row:
+            return {"found": False}
+        valid = self.keys.verify("receipt_sign", row["key_version"], row["signature"],
+                                 f"{row['code']}|{row['issued_hour']}".encode())
+        return {"found": True, "issued_hour": row["issued_hour"], "signature_valid": valid}
