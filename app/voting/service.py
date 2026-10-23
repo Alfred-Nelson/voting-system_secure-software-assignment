@@ -5,6 +5,7 @@ Flow:
                    blind-sign the voter's anonymous credential
 """
 import json
+import secrets
 import uuid
 from datetime import date, datetime, timezone
 
@@ -198,9 +199,33 @@ class ElectionService:
                          "ballot_hash) VALUES (?,?,?,?,?)",
                          (str(uuid.uuid4()), credential_hash, envelope_json, signature_b64, bh))
             receipt = self._issue_receipt(conn, bh)
+            pool_size = conn.execute("SELECT COUNT(*) FROM ballot_pool").fetchone()[0]
+            if pool_size >= self.cfg.MIX_BATCH_SIZE:
+                self._flush_pool(conn)
         # Nothing is audited per ballot: a per-ballot audit entry would put a timestamp
         # next to each submission and let someone line it up with logins (SR-07, SR-09).
         return receipt
+
+    def _flush_pool(self, conn):
+        """SR-09 / SR-11: shuffle the pending batch with a CSPRNG, then move it into
+        the ballot store and append it to the ledger in that random order."""
+        rows = [dict(r) for r in conn.execute("SELECT * FROM ballot_pool")]
+        if not rows:
+            return 0
+        secrets.SystemRandom().shuffle(rows)
+        for r in rows:
+            conn.execute("INSERT INTO ballots (id, credential_hash, envelope, signature, "
+                         "ballot_hash, superseded) VALUES (?,?,?,?,?,?)",
+                         (r["id"], r["credential_hash"], r["envelope"], r["signature"],
+                          r["ballot_hash"], r["superseded"]))
+            self.ledger.append_in(conn, r["ballot_hash"])
+        conn.execute("DELETE FROM ballot_pool")
+        self.audit.record("ballots.batch_mixed", "system", "system", {"ballots": len(rows)})
+        return len(rows)
+
+    def flush_pool(self):
+        with self.dbs.transaction("ballot") as conn:
+            return self._flush_pool(conn)
 
     def _issue_receipt(self, conn, bh):
         """SR-15: receipt code derived from the ballot hash; reveals nothing about
