@@ -5,6 +5,7 @@ Flow:
                    blind-sign the voter's anonymous credential
 """
 import json
+import uuid
 from datetime import date
 
 from ..security import blind
@@ -192,3 +193,7 @@ class ElectionService:
             for table in ("ballots", "ballot_pool"):
                 conn.execute(f"UPDATE {table} SET superseded = 1 WHERE credential_hash = ? "  # nosec B608
                              "AND superseded = 0", (credential_hash,))
+            # SR-09: random id, no timestamp - storage order reveals nothing about arrival order
+            conn.execute("INSERT INTO ballot_pool (id, credential_hash, envelope, signature, "
+                         "ballot_hash) VALUES (?,?,?,?,?)",
+                         (str(uuid.uuid4()), credential_hash, envelope_json, signature_b64, bh))

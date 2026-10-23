@@ -330,3 +330,71 @@ def test_rejected_ballot_does_not_supersede_anything(svc, open_election):
                                     sign_envelope(ec.generate_private_key(ec.SECP256R1()), bad_env))
     assert _flag(svc, "ballots", cred, env, sig) == 0
 
+
+# ---- Task 6: insert into ballot_pool with a random UUID id ------------------------------
+def _pool(svc):
+    with svc.dbs.connect("ballot") as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM ballot_pool")]
+
+
+def test_accepted_ballot_is_stored_in_the_pool(svc, open_election):
+    cred, token, env, sig = make_submission(svc)
+    open_election.submit_ballot(cred, token, env, sig)
+    (row,) = _pool(svc)
+    assert row["credential_hash"] == sha256_hex(b64d(cred))
+    assert json.loads(row["envelope"]) == env
+    assert row["signature"] == sig
+    assert row["ballot_hash"] == _hash_of(cred, env, sig)
+    assert row["superseded"] == 0
+
+
+def test_pool_row_id_is_a_random_uuid(svc, open_election):                         # SR-09
+    open_election.submit_ballot(*make_submission(svc))
+    open_election.submit_ballot(*make_submission(svc))
+    ids = [r["id"] for r in _pool(svc)]
+    assert len(set(ids)) == 2
+    assert all(uuid.UUID(i).version == 4 and str(uuid.UUID(i)) == i for i in ids)
+
+
+def test_pool_ids_do_not_follow_submission_order(svc, open_election):             # SR-09
+    order = []
+    for _ in range(12):
+        sub = make_submission(svc)
+        open_election.submit_ballot(*sub)
+        order.append(_hash_of(sub[0], sub[2], sub[3]))
+    by_id = [r["ballot_hash"] for r in sorted(_pool(svc), key=lambda r: r["id"])]
+    assert len(by_id) == 12 and by_id != order      # a sequential id would make these equal
+
+
+def test_pool_has_no_voter_or_time_column(svc):                                    # SR-07 / SR-09
+    with svc.dbs.connect("ballot") as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(ballot_pool)")}
+    assert cols == {"id", "credential_hash", "envelope", "signature", "ballot_hash",
+                    "superseded"}
+
+
+def test_revote_stores_new_ballot_and_supersedes_the_old(svc, open_election):     # SR-30
+    key, cred, token = make_credential(svc, with_key=True)
+    for text in (b"first", b"second"):
+        env = make_envelope(svc, text)
+        open_election.submit_ballot(cred, token, env, sign_envelope(key, env))
+    rows = sorted(_pool(svc), key=lambda r: r["superseded"])
+    assert [r["superseded"] for r in rows] == [0, 1]       # only the latest stays live
+    assert rows[0]["envelope"] != rows[1]["envelope"]
+
+
+def test_resubmitting_a_stored_ballot_is_a_replay(svc, open_election):
+    sub = make_submission(svc)
+    open_election.submit_ballot(*sub)
+    with pytest.raises(VotingError, match="duplicate ballot") as exc:
+        open_election.submit_ballot(*sub)
+    assert exc.value.status == 409
+    assert len(_pool(svc)) == 1
+
+
+def test_rejected_ballot_is_not_stored(svc, open_election):
+    cred, token, env, _ = make_submission(svc)
+    with pytest.raises(VotingError):
+        open_election.submit_ballot(cred, token, env, b64e(b"\x00" * 64))
+    assert _pool(svc) == []
+
