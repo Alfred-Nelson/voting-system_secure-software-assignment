@@ -1,5 +1,6 @@
 """SR-06 - personal data encrypted at rest (the voting-flow tests are added in later issues)."""
 import base64
+import json
 
 import pytest
 
@@ -102,3 +103,17 @@ def test_identified_submission_refused(h, http):                            # SR
     v, sub = _submission(h)
     r = http.post("/api/ballots", json=sub, headers={"Authorization": "Bearer abc"})
     assert r.status_code == 400
+
+
+def test_no_link_between_voter_and_ballot(h, svc):                          # SR-07 / SR-08
+    h.open_polls()
+    v = h.voter("NSW1000001")
+    v.cast(BALLOT)
+    with svc.dbs.connect("ballot") as c:
+        cols = [r[1] for r in c.execute("PRAGMA table_info(ballots)")]
+        ballot_row = dict(c.execute("SELECT * FROM ballots").fetchone())
+    assert not {"voter_id", "ts", "timestamp", "created"} & set(cols)
+    audit_text = json.dumps(svc.audit.entries(1000))
+    assert ballot_row["credential_hash"] not in audit_text
+    assert ballot_row["ballot_hash"] not in audit_text
+    assert "NSW1000001" not in audit_text                # enrolment id never logged in clear
