@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 from fractions import Fraction
 
 from app.voting import tally
@@ -214,6 +215,17 @@ def test_exclusion_tie_is_broken_by_lower_previous_total_before_candidate_id():
     res = count(orders, CANDS, 1)
     assert res["quota"] == 6
     assert res["elected"] == ["C"]
+
+
+def test_identical_result_on_rerun_and_any_input_order():
+    rng = random.Random(7)
+    pool = [rng.sample(CANDS, rng.randint(1, 4)) for _ in range(500)]
+    a = count(pool, CANDS, 2)
+    shuffled = pool[:]
+    rng.shuffle(shuffled)
+    b = count(shuffled, CANDS, 2)
+    assert a == b                            # byte-identical: exact fractions + sorted input
+    assert a["input_digest"] == b["input_digest"]
 
 
 def test_exclusion_is_deterministic_for_any_ballot_order():
