@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 
 from ..security import blind
 from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
-                               load_spki, sha256_hex)
+                               load_spki, sha256_hex, hybrid_decrypt, unpad_fixed)
 from .ledger import ballot_hash
 
 
@@ -265,4 +265,18 @@ class ElectionService:
             self.monitor.alert("critical", "ledger.tamper", "; ".join(integrity["problems"]))
             raise VotingError("integrity check failed - count blocked: "
                               + "; ".join(integrity["problems"]), 409)
-        return integrity
+
+        with self.dbs.connect("ballot") as conn:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT envelope FROM ballots WHERE superseded = 0")]
+        secrets.SystemRandom().shuffle(rows)   # SR-09: break any storage ordering
+        ballots, undecryptable = [], 0
+        for r in rows:
+            try:
+                plain = unpad_fixed(hybrid_decrypt(self.keys.unwrap_ballot_key,
+                                                   json.loads(r["envelope"])))
+                ballots.append(json.loads(plain))
+            except (CryptoError, ValueError):
+                undecryptable += 1
+        return {"integrity": integrity, "decrypted_ballots": len(ballots),
+                "undecryptable_ballots": undecryptable}
