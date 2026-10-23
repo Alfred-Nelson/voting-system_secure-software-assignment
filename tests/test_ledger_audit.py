@@ -48,3 +48,9 @@ def test_audit_detects_recomputed_hash_without_mac_key(svc, creds):
                   (forged, last["seq"]))
     res = svc.audit.verify_chain()
     assert not res["ok"] and "MAC" in res["reason"]
+
+
+def test_admin_actions_are_audited_with_identity(h, http, svc):
+    h.open_polls()
+    entry = next(e for e in svc.audit.entries() if e["action"] == "election.status_changed")
+    assert entry["actor"] == "admin1" and '"before": "setup"' in entry["details"]

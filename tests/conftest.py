@@ -64,6 +64,11 @@ class Helper:
         self._headers[user] = {"Authorization": "Bearer " + r.get_json()["token"]}
         return self._headers[user]
 
+    def open_polls(self):
+        r = self.http.post("/api/admin/election/status", json={"status": "open"},
+                           headers=self.staff("admin1"))
+        assert r.status_code == 200
+
 
 @pytest.fixture
 def h(app, http, creds):
