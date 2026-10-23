@@ -1,4 +1,7 @@
 """SR-06 - personal data encrypted at rest (the voting-flow tests are added in later issues)."""
+import base64
+import json
+
 import pytest
 
 from client.voter_client import ClientError
@@ -58,3 +61,59 @@ def test_concurrent_credential_requests_only_one_succeeds(h, svc):        # SR-0
     for t in threads:
         t.join()
     assert results.count("ok") == 1 and results.count("refused") == 9
+
+
+def _submission(h):
+    h.open_polls()
+    v = h.voter("NSW1000001")
+    v.obtain_credential()
+    return v, v.build_submission(BALLOT)
+
+
+def test_forged_credential_rejected(h, http):                               # SR-07
+    _, sub = _submission(h)
+    sub["token"] = format(int(sub["token"], 16) ^ 0xFF, "x")
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 403
+
+
+def test_modified_ciphertext_rejected(h, http):                             # SR-10
+    _, sub = _submission(h)
+    ct = bytearray(base64.b64decode(sub["envelope"]["ciphertext"]))
+    ct[10] ^= 1
+    sub["envelope"]["ciphertext"] = base64.b64encode(bytes(ct)).decode()
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 400 and "signature" in r.get_json()["error"]
+
+
+def test_wrong_size_envelope_rejected(h, http):                              # SR-09
+    v, sub = _submission(h)
+    sub["envelope"]["ciphertext"] = base64.b64encode(b"x" * 100).decode()
+    r = http.post("/api/ballots", json=sub)
+    assert r.status_code == 400
+
+
+def test_replayed_ballot_rejected(h, http):
+    _, sub = _submission(h)
+    assert http.post("/api/ballots", json=sub).status_code == 201
+    assert http.post("/api/ballots", json=sub).status_code == 409
+
+
+def test_identified_submission_refused(h, http):                            # SR-07
+    v, sub = _submission(h)
+    r = http.post("/api/ballots", json=sub, headers={"Authorization": "Bearer abc"})
+    assert r.status_code == 400
+
+
+def test_no_link_between_voter_and_ballot(h, svc):                          # SR-07 / SR-08
+    h.open_polls()
+    v = h.voter("NSW1000001")
+    v.cast(BALLOT)
+    with svc.dbs.connect("ballot") as c:
+        cols = [r[1] for r in c.execute("PRAGMA table_info(ballots)")]
+        ballot_row = dict(c.execute("SELECT * FROM ballots").fetchone())
+    assert not {"voter_id", "ts", "timestamp", "created"} & set(cols)
+    audit_text = json.dumps(svc.audit.entries(1000))
+    assert ballot_row["credential_hash"] not in audit_text
+    assert ballot_row["ballot_hash"] not in audit_text
+    assert "NSW1000001" not in audit_text                # enrolment id never logged in clear
