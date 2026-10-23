@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from app.security import blind
+from app.security.crypto import (ecdsa_sign_raw, envelope_signing_bytes, hybrid_encrypt,
+                                 pad_fixed)
 from app.voting import formality
 
 
@@ -111,6 +113,19 @@ class VoterClient:
         self.t.request("POST", "/api/auth/logout", None, self._auth())
         self.token = None
         return self.credential
+
+    def build_submission(self, ballot):
+        e = self.election or self.load_election()
+        result = self.check_formality(ballot)
+        if not result.formal:
+            raise ClientError("informal ballot: " + "; ".join(result.errors))
+        pub = serialization.load_pem_public_key(e["keys"]["ballot_encryption_pem"].encode())
+        plain = pad_fixed(json.dumps(ballot, sort_keys=True).encode(), e["pad_bytes"])
+        envelope = hybrid_encrypt(pub, plain)
+        sig = ecdsa_sign_raw(self.credential["key"], envelope_signing_bytes(envelope))
+        return {"credential": base64.b64encode(self.credential["spki"]).decode(),
+                "token": self.credential["token"], "envelope": envelope,
+                "signature": base64.b64encode(sig).decode()}
 
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
     def _save_wallet(self):
