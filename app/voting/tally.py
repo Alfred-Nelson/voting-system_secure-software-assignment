@@ -13,6 +13,10 @@ class Paper:
         self.pos = 0
 
 
+def _fmt(totals):
+    return {cid: f"{float(v):.4f}" for cid, v in sorted(totals.items())}
+
+
 def count(preference_orders, candidates, vacancies, excluded=()):
     excluded = set(excluded)
     candidates = sorted(c for c in candidates if c not in excluded)
@@ -26,7 +30,7 @@ def count(preference_orders, candidates, vacancies, excluded=()):
     elected = []
     piles = {c: [] for c in candidates}
     exhausted = Fraction(0)
-
+    rounds = []
     def place(paper):
         nonlocal exhausted
         while paper.pos < len(paper.order) and paper.order[paper.pos] not in continuing:
@@ -43,19 +47,24 @@ def count(preference_orders, candidates, vacancies, excluded=()):
         return {c: sum((p.weight for p in piles[c]), Fraction(0)) for c in continuing}
 
     pending_surplus = []
+    round_no = 0
     prev_totals = {c: Fraction(0) for c in candidates}
     while len(elected) < vacancies and continuing:
+        round_no += 1
         t = totals()
         newly = sorted((c for c in continuing if t[c] >= quota), key=lambda c: (-t[c], c))
         for c in newly:
             elected.append(c)
             continuing.discard(c)
             pending_surplus.append((c, t[c]))
+            rounds.append({"round": round_no, "action": f"elected {c}", "totals": _fmt(t)})
         if len(elected) >= vacancies:
             break
         if len(elected) + len(continuing) <= vacancies:
             for c in sorted(continuing, key=lambda c: (-t[c], c)):
                 elected.append(c)
+                rounds.append({"round": round_no, "action": f"elected {c} (remaining vacancy)",
+                               "totals": _fmt(t)})
             continuing.clear()
             break
         if pending_surplus:
@@ -67,6 +76,9 @@ def count(preference_orders, candidates, vacancies, excluded=()):
                 for p in papers:
                     p.weight *= tv
                     place(p)
+                rounds.append({"round": round_no,
+                               "action": f"transfer surplus of {c} at value {float(tv):.6f}",
+                               "totals": _fmt(totals())})
             else:
                 piles[c] = []
             continue
@@ -76,7 +88,17 @@ def count(preference_orders, candidates, vacancies, excluded=()):
         papers, piles[lowest] = piles[lowest], []
         for p in papers:
             place(p)
+        rounds.append({"round": round_no, "action": f"excluded {lowest}", "totals": _fmt(totals())})
         prev_totals = t
 
-    # Partial result: the remaining fields are added in later tasks.
-    return {"input_digest": digest, "quota": quota, "elected": elected}
+    return {
+        "method": "STV, Droop quota, weighted inclusive Gregory transfers, exact arithmetic",
+        "input_digest": digest,
+        "formal_ballots": total,
+        "vacancies": vacancies,
+        "quota": quota,
+        "excluded_before_count": sorted(excluded),
+        "elected": elected,
+        "exhausted": f"{float(exhausted):.4f}",
+        "rounds": rounds,
+    }

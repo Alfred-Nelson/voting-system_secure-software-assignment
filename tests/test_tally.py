@@ -204,3 +204,89 @@ def test_known_vector_with_surplus_then_exclusion():
     res = count(orders, CANDS, 2)
     assert res["quota"] == 7
     assert res["elected"] == ["B", "A"]
+
+
+def test_result_contains_method_digest_quota_elected_exhausted_and_rounds():
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["C"]] * 2
+    res = count(orders, ["A", "B", "C"], 2, excluded=[])
+    assert res["method"] == "STV, Droop quota, weighted inclusive Gregory transfers, exact arithmetic"
+    assert len(res["input_digest"]) == 64
+    assert res["formal_ballots"] == 9
+    assert res["vacancies"] == 2
+    assert res["quota"] == 4
+    assert res["excluded_before_count"] == []
+    assert res["elected"] == ["A", "B"]
+    assert isinstance(res["exhausted"], str)
+    assert isinstance(res["rounds"], list) and res["rounds"]
+
+
+def test_excluded_before_count_is_sorted_and_listed():
+    res = count([["A", "B"]] * 3, CANDS, 1, excluded=["D", "C"])
+    assert res["excluded_before_count"] == ["C", "D"]
+
+
+def test_rounds_record_election_transfer_and_totals_with_four_decimals():
+    # quota 4. A=8 is elected, surplus 4 transfers at 4/8 = 0.5 so B = 4 is elected.
+    orders = [["A", "B"]] * 8 + [["C"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
+    assert res["rounds"] == [
+        {"round": 1, "action": "elected A",
+         "totals": {"A": "8.0000", "B": "0.0000", "C": "2.0000"}},
+        {"round": 1, "action": "transfer surplus of A at value 0.500000",
+         "totals": {"B": "4.0000", "C": "2.0000"}},
+        {"round": 2, "action": "elected B",
+         "totals": {"B": "4.0000", "C": "2.0000"}},
+    ]
+
+
+def test_rounds_record_exclusions_in_order():
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["D", "B"]] * 2
+    res = count(orders, CANDS, 1)
+    assert [(r["round"], r["action"]) for r in res["rounds"]] == [
+        (1, "excluded C"), (2, "excluded D"), (3, "elected B"),
+    ]
+    assert res["rounds"][0]["totals"] == {"A": "4.0000", "B": "3.0000", "D": "2.0000"}
+    assert res["rounds"][1]["totals"] == {"A": "4.0000", "B": "5.0000"}
+
+
+def test_rounds_record_remaining_vacancy_fill():
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["C"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
+    assert [(r["round"], r["action"]) for r in res["rounds"]] == [
+        (1, "elected A"), (2, "excluded C"), (3, "elected B (remaining vacancy)"),
+    ]
+    assert res["rounds"][-1]["totals"] == {"B": "3.0000"}
+
+
+def test_fractional_transfer_value_and_totals_are_formatted_from_exact_fractions():
+    orders = [["A", "C"]] * 4 + [["A", "B"]] * 2 + [["C"]] + [["B"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
+    assert res["rounds"][1] == {
+        "round": 1, "action": "transfer surplus of A at value 0.333333",
+        "totals": {"B": "2.6667", "C": "2.3333"},
+    }
+
+
+def test_exhausted_is_reported_as_weight_not_ballot_count():
+    # A's 8 papers transfer at 1/2 with no further preference: 8 * 1/2 = 4 exhausted.
+    orders = [["A"]] * 8 + [["B"]] * 2
+    res = count(orders, ["A", "B", "C"], 2)
+    assert res["exhausted"] == "4.0000"
+
+
+def test_exhausted_is_zero_when_every_paper_stays_in_the_count():
+    res = count([["A"], ["A"], ["B"]], ["A", "B"], 1)
+    assert res["exhausted"] == "0.0000"
+
+
+def test_whole_result_is_byte_identical_for_any_ballot_order():
+    import random
+
+    rng = random.Random(7)
+    pool = [rng.sample(CANDS, rng.randint(1, 4)) for _ in range(500)]
+    first = count(pool, CANDS, 2)
+    shuffled = pool[:]
+    rng.shuffle(shuffled)
+    second = count(shuffled, CANDS, 2)
+    assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+    assert first["input_digest"] == second["input_digest"]
