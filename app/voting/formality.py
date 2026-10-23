@@ -59,19 +59,25 @@ def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
     """
     if not isinstance(ballot, dict):
         return FormalityResult(False, errors=["ballot must be an object"])
-    errors = []
+    errors, warnings = [], []
     atl = _clean(ballot.get("atl"), set(groups), "Above the line", errors)
     btl = _clean(ballot.get("btl"), set(candidates), "Below the line", errors)
     if errors:
         return FormalityResult(False, errors=errors)
 
     btl_needed = min(6, len(candidates))
+    atl_advised = min(6, len(groups))
 
     # ---- below the line first (takes precedence when formal)
     if btl:
         seq, by_number = _sequence(btl)
         if len(seq) >= btl_needed:
-            return FormalityResult(True, "btl", seq)
+            if len(seq) < len(btl):
+                warnings.append(f"Below the line: counting stops after preference {len(seq)} "
+                                "because of a missing or repeated number")
+            if atl:
+                warnings.append("Both sections completed - your below-the-line vote is used")
+            return FormalityResult(True, "btl", seq, [], warnings)
         dupes = [n for n, keys in by_number.items() if len(keys) > 1 and n <= btl_needed]
         msg = (f"Below the line: number at least 1 to {btl_needed} with no repeats or gaps")
         if dupes:
@@ -86,7 +92,13 @@ def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
             reason = ("the number 1 appears in more than one box" if len(by_number.get(1, [])) > 1
                       else "there is no number 1")
             return FormalityResult(False, errors=[f"Above the line: informal because {reason}"])
+        if len(seq) < len(atl):
+            warnings.append(f"Above the line: counting stops after preference {len(seq)} "
+                            "because of a missing or repeated number")
+        if len(seq) < atl_advised:
+            warnings.append(f"Above the line: you numbered {len(seq)} box(es); the instructions "
+                            f"ask for at least {atl_advised}. Your vote is still formal.")
         order = [cid for g in seq for cid in groups[g]]
-        return FormalityResult(True, "atl", order)
+        return FormalityResult(True, "atl", order, [], warnings)
 
     return FormalityResult(False, errors=["The ballot is blank"])
