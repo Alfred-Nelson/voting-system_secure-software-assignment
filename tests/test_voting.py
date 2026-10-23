@@ -90,3 +90,9 @@ def test_wrong_size_envelope_rejected(h, http):                              # S
     sub["envelope"]["ciphertext"] = base64.b64encode(b"x" * 100).decode()
     r = http.post("/api/ballots", json=sub)
     assert r.status_code == 400
+
+
+def test_replayed_ballot_rejected(h, http):
+    _, sub = _submission(h)
+    assert http.post("/api/ballots", json=sub).status_code == 201
+    assert http.post("/api/ballots", json=sub).status_code == 409
