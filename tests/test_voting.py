@@ -134,3 +134,35 @@ def test_ballot_stored_encrypted(h, svc):                                   # SR
     with svc.dbs.connect("ballot") as c:
         env = c.execute("SELECT envelope FROM ballots").fetchone()[0]
     assert '"atl"' not in env and "wrapped_key" in env
+
+
+def test_ballots_mixed_in_batches_before_ledger(tmp_path, creds):            # SR-09
+    """With a mixing batch of 3, nothing reaches the ledger until 3 ballots are
+    pooled; the batch is then shuffled, so ledger order != submission order."""
+    import secrets as _s
+    from app import create_app
+    from app.config import TestConfig
+    from app.seed import seed
+    from tests.conftest import Helper
+
+    class MixCfg(TestConfig):
+        MASTER_KEY_HEX = _s.token_hex(32)
+        MIX_BATCH_SIZE = 3
+
+    app = create_app(MixCfg, tmp_path / "mix")
+    svc = app.evote
+    helper = Helper(app, app.test_client(), seed(svc))
+    helper.open_polls()
+    receipts = []
+    for i in (1, 2):
+        receipts.append(helper.voter(f"NSW100000{i}").cast({"atl": {"A": 1}})["receipt"])
+    assert svc.ledger.verify()["ledger_entries"] == 0          # still in the mixing pool
+    receipts.append(helper.voter("NSW1000003").cast({"atl": {"B": 1}})["receipt"])
+    assert svc.ledger.verify() == {"ok": True, "ledger_entries": 3, "stored_ballots": 3,
+                                   "problems": []}
+    actions = [e["action"] for e in svc.audit.entries()]
+    assert "ballots.batch_mixed" in actions and "ballot.accepted" not in actions
+    helper.voter("NSW1000004").cast({"atl": {"C": 1}})
+    adm = helper.staff("admin1")
+    helper.http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    assert svc.ledger.verify()["ledger_entries"] == 4          # closing flushes the last batch
