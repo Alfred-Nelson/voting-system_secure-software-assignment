@@ -35,6 +35,27 @@ def test_ineligible_voters_refused(h, enrol, reason):                        # S
         h.voter(enrol).cast(BALLOT)
 
 
+def test_second_credential_refused(h):                                       # SR-04
+    h.open_polls()
+    h.voter("NSW1000001").cast(BALLOT)
+    with pytest.raises(ClientError, match="already voted"):
+        h.voter("NSW1000001").cast(BALLOT)
+
+
+def test_cross_channel_double_vote_blocked(h, http, svc):                    # SR-04
+    h.open_polls()
+    off = h.staff("officer1")
+    assert http.post("/api/station/mark-voted", json={"enrolment_id": "NSW1000003"},
+                     headers=off).status_code == 200
+    with pytest.raises(ClientError, match="already voted"):
+        h.voter("NSW1000003").cast(BALLOT)
+    h.voter("NSW1000004").cast(BALLOT)
+    r = http.post("/api/station/mark-voted", json={"enrolment_id": "NSW1000004", "channel": "postal"},
+                  headers=off)
+    assert r.status_code == 409
+    assert any(a["kind"] == "double_vote" for a in svc.monitor.alerts())
+
+
 def test_pii_encrypted_in_identity_db(svc, creds):                          # SR-06
     raw = (svc.dbs.paths["identity"]).read_bytes()
     assert b"Aisha Rahman" not in raw and b"George St" not in raw and b"NSW1000001" not in raw
@@ -61,6 +82,15 @@ def test_concurrent_credential_requests_only_one_succeeds(h, svc):        # SR-0
     for t in threads:
         t.join()
     assert results.count("ok") == 1 and results.count("refused") == 9
+
+
+def test_bulletin_does_not_reveal_superseded_status(h, http, tmp_path):     # SR-30 coercion
+    h.open_polls()
+    v = h.voter("NSW1000001", wallet_path=tmp_path / "w.json")
+    v.cast(BALLOT)
+    v.cast({"atl": {"B": 1}})
+    rows = http.get("/api/bulletin").get_json()["receipts"]
+    assert len(rows) == 2 and all(set(r) == {"code", "issued_hour"} for r in rows)
 
 
 def _submission(h):
@@ -117,3 +147,43 @@ def test_no_link_between_voter_and_ballot(h, svc):                          # SR
     assert ballot_row["credential_hash"] not in audit_text
     assert ballot_row["ballot_hash"] not in audit_text
     assert "NSW1000001" not in audit_text                # enrolment id never logged in clear
+
+
+def test_ballot_stored_encrypted(h, svc):                                   # SR-05
+    h.open_polls()
+    h.voter("NSW1000001").cast({"atl": {"A": 1}})
+    with svc.dbs.connect("ballot") as c:
+        env = c.execute("SELECT envelope FROM ballots").fetchone()[0]
+    assert '"atl"' not in env and "wrapped_key" in env
+
+
+def test_ballots_mixed_in_batches_before_ledger(tmp_path, creds):            # SR-09
+    """With a mixing batch of 3, nothing reaches the ledger until 3 ballots are
+    pooled; the batch is then shuffled, so ledger order != submission order."""
+    import secrets as _s
+    from app import create_app
+    from app.config import TestConfig
+    from app.seed import seed
+    from tests.conftest import Helper
+
+    class MixCfg(TestConfig):
+        MASTER_KEY_HEX = _s.token_hex(32)
+        MIX_BATCH_SIZE = 3
+
+    app = create_app(MixCfg, tmp_path / "mix")
+    svc = app.evote
+    helper = Helper(app, app.test_client(), seed(svc))
+    helper.open_polls()
+    receipts = []
+    for i in (1, 2):
+        receipts.append(helper.voter(f"NSW100000{i}").cast({"atl": {"A": 1}})["receipt"])
+    assert svc.ledger.verify()["ledger_entries"] == 0          # still in the mixing pool
+    receipts.append(helper.voter("NSW1000003").cast({"atl": {"B": 1}})["receipt"])
+    assert svc.ledger.verify() == {"ok": True, "ledger_entries": 3, "stored_ballots": 3,
+                                   "problems": []}
+    actions = [e["action"] for e in svc.audit.entries()]
+    assert "ballots.batch_mixed" in actions and "ballot.accepted" not in actions
+    helper.voter("NSW1000004").cast({"atl": {"C": 1}})
+    adm = helper.staff("admin1")
+    helper.http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    assert svc.ledger.verify()["ledger_entries"] == 4          # closing flushes the last batch

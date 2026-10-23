@@ -4,6 +4,48 @@ import sqlite3
 import pytest
 
 
+def _vote_and_close(h, http, n=4):
+    h.open_polls()
+    for i in range(1, n + 1):
+        h.voter(f"NSW100000{i}").cast({"atl": {"A": 1, "B": 2}})
+    adm = h.staff("admin1")
+    http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    return adm
+
+
+def test_ledger_verifies_and_has_batch_checksums(h, http, svc):
+    _vote_and_close(h, http, 4)
+    res = svc.ledger.verify()
+    assert res["ok"] and res["ledger_entries"] == 4
+    with svc.dbs.connect("ballot") as c:
+        kinds = [r[0] for r in c.execute("SELECT kind FROM ledger ORDER BY seq")]
+    assert kinds.count("batch") == 1          # batch size 3 in tests
+
+
+def test_ledger_is_append_only(h, http, svc):
+    _vote_and_close(h, http, 1)
+    with sqlite3.connect(svc.dbs.paths["ballot"]) as c:
+        with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+            c.execute("DELETE FROM ledger")
+        with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+            c.execute("UPDATE ledger SET item_hash = 'x'")
+
+
+def test_deleted_ballot_detected(h, http, svc):
+    _vote_and_close(h, http, 2)
+    with sqlite3.connect(svc.dbs.paths["ballot"]) as c:
+        c.execute("DELETE FROM ballots WHERE rowid = (SELECT MIN(rowid) FROM ballots)")
+    res = svc.ledger.verify()
+    assert not res["ok"] and any("missing" in p for p in res["problems"])
+
+
+def test_injected_ballot_detected(h, http, svc):
+    _vote_and_close(h, http, 1)
+    with sqlite3.connect(svc.dbs.paths["ballot"]) as c:
+        c.execute("INSERT INTO ballots VALUES ('x', 'c', '{}', 's', 'h', 0)")
+    assert not svc.ledger.verify()["ok"]
+
+
 def test_audit_log_append_only(svc, creds):
     with sqlite3.connect(svc.dbs.paths["audit"]) as c:
         with pytest.raises(sqlite3.DatabaseError):

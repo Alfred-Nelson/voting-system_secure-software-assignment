@@ -10,6 +10,11 @@ def test_security_headers(http):
     assert r.headers["Cache-Control"] == "no-store"
 
 
+def test_oversized_request_rejected(http):
+    r = http.post("/api/ballots", data="x" * 70000, content_type="application/json")
+    assert r.status_code == 413
+
+
 def test_election_status_transitions_enforced(h, http):
     adm = h.staff("admin1")
     r = http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
