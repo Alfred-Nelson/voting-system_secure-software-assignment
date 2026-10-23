@@ -7,7 +7,8 @@ Flow:
 from datetime import date
 
 from ..security import blind
-from ..security.crypto import CryptoError, b64d, load_spki
+from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
+                               load_spki)
 from .ledger import ballot_hash
 
 
@@ -160,7 +161,7 @@ class ElectionService:
             raise VotingError("voting is not open", 409)
         try:
             spki = b64d(credential_b64)
-            load_spki(spki)
+            cred_key = load_spki(spki)
             n, e = self.keys.blind_public()
             token = int(token_hex, 16)
             if not blind.verify(blind.message_int(spki, n), token, n, e):
@@ -171,5 +172,9 @@ class ElectionService:
             # SR-09: every ballot must use the fixed-size envelope
             if len(b64d(envelope["ciphertext"])) != self.cfg.BALLOT_PAD_BYTES + 16:
                 raise VotingError("ballot envelope has the wrong size")
+            ecdsa_verify_raw(cred_key, b64d(signature_b64), envelope_signing_bytes(envelope))
+        except CryptoError as exc:
+            self.audit.record("ballot.rejected", "anonymous", "voter", {"reason": str(exc)})
+            raise VotingError(f"ballot rejected: {exc}", 400)
         except (TypeError, ValueError):
             raise VotingError("malformed ballot submission")
