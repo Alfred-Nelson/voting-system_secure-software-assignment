@@ -4,10 +4,13 @@ Flow:
   identity side  : login (MFA) -> eligibility check -> double-vote check ->
                    blind-sign the voter's anonymous credential
 """
-from datetime import date
+import json
+import uuid
+from datetime import date, datetime, timezone
 
 from ..security import blind
-from ..security.crypto import CryptoError
+from ..security.crypto import (CryptoError, b64d, ecdsa_verify_raw, envelope_signing_bytes,
+                               load_spki, sha256_hex)
 from .ledger import ballot_hash
 
 
@@ -153,3 +156,57 @@ class ElectionService:
             conn.execute("UPDATE voters SET voted_channel = ? WHERE id = ?", (channel, voter["id"]))
         self.audit.record("vote.marked_offline", staff_user, "employee",
                           {"voter": voter["id"], "channel": channel})
+
+    # ------------------------------------------------------------ ballot side (anonymous)
+    def submit_ballot(self, credential_b64, token_hex, envelope, signature_b64):
+        if self.status() != "open":
+            raise VotingError("voting is not open", 409)
+        try:
+            spki = b64d(credential_b64)
+            cred_key = load_spki(spki)
+            n, e = self.keys.blind_public()
+            token = int(token_hex, 16)
+            if not blind.verify(blind.message_int(spki, n), token, n, e):
+                raise VotingError("credential was not issued by the AEC", 403)
+            if not isinstance(envelope, dict) or set(envelope) != {"wrapped_key", "iv",
+                                                                   "ciphertext"}:
+                raise VotingError("malformed ballot envelope")
+            # SR-09: every ballot must use the fixed-size envelope
+            if len(b64d(envelope["ciphertext"])) != self.cfg.BALLOT_PAD_BYTES + 16:
+                raise VotingError("ballot envelope has the wrong size")
+            ecdsa_verify_raw(cred_key, b64d(signature_b64), envelope_signing_bytes(envelope))
+        except CryptoError as exc:
+            self.audit.record("ballot.rejected", "anonymous", "voter", {"reason": str(exc)})
+            raise VotingError(f"ballot rejected: {exc}", 400)
+        except (TypeError, ValueError):
+            raise VotingError("malformed ballot submission")
+
+        credential_hash = sha256_hex(spki)
+        envelope_json = json.dumps(envelope, sort_keys=True, separators=(",", ":"))
+        bh = ballot_hash(credential_hash, envelope_json, signature_b64)
+        with self.dbs.transaction("ballot") as conn:
+            for table in ("ballots", "ballot_pool"):
+                if conn.execute(f"SELECT 1 FROM {table} WHERE ballot_hash = ?",  # nosec B608
+                                (bh,)).fetchone():
+                    raise VotingError("duplicate ballot (replay)", 409)
+            # SR-30: a newer ballot from the same anonymous credential replaces the older one
+            for table in ("ballots", "ballot_pool"):
+                conn.execute(f"UPDATE {table} SET superseded = 1 WHERE credential_hash = ? "  # nosec B608
+                             "AND superseded = 0", (credential_hash,))
+            # SR-09: random id, no timestamp - storage order reveals nothing about arrival order
+            conn.execute("INSERT INTO ballot_pool (id, credential_hash, envelope, signature, "
+                         "ballot_hash) VALUES (?,?,?,?,?)",
+                         (str(uuid.uuid4()), credential_hash, envelope_json, signature_b64, bh))
+            receipt = self._issue_receipt(conn, bh)
+        # Nothing is audited per ballot: a per-ballot audit entry would put a timestamp
+        # next to each submission and let someone line it up with logins (SR-07, SR-09).
+        return receipt
+
+    def _issue_receipt(self, conn, bh):
+        """SR-15: receipt code derived from the ballot hash; reveals nothing about
+        the vote. Coarse (hourly) timestamp only, to respect SR-09."""
+        code = "-".join(bh[i:i + 4].upper() for i in range(0, 20, 4))
+        hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00Z")
+        version, sig = self.keys.sign("receipt_sign", f"{code}|{hour}".encode())
+        conn.execute("INSERT INTO receipts VALUES (?,?,?,?)", (code, hour, version, sig))
+        return {"receipt": code, "issued_hour": hour, "key_version": version, "signature": sig}
