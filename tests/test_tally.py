@@ -92,6 +92,14 @@ def test_candidate_exactly_at_quota_is_elected():
     assert res["elected"][0] == "A"
 
 
+def test_quota_and_first_preference_election():
+    orders = [["A", "B"]] * 5 + [["B"]] * 3 + [["C"]] * 2
+    res = count(orders, CANDS, 1)
+    assert res["quota"] == 10 // 2 + 1 == 6
+    # nobody reaches quota: D, C then B are excluded and A wins the remaining vacancy
+    assert res["elected"] == ["A"]
+
+
 def test_surplus_transfer_elects_second_candidate():
     # 10 ballots, 2 vacancies, quota 4. A has 8 -> surplus 4, value 4/8 = 1/2,
     # so B receives 8 * 1/2 = 4 which reaches quota.
