@@ -63,6 +63,15 @@ def test_concurrent_credential_requests_only_one_succeeds(h, svc):        # SR-0
     assert results.count("ok") == 1 and results.count("refused") == 9
 
 
+def test_bulletin_does_not_reveal_superseded_status(h, http, tmp_path):     # SR-30 coercion
+    h.open_polls()
+    v = h.voter("NSW1000001", wallet_path=tmp_path / "w.json")
+    v.cast(BALLOT)
+    v.cast({"atl": {"B": 1}})
+    rows = http.get("/api/bulletin").get_json()["receipts"]
+    assert len(rows) == 2 and all(set(r) == {"code", "issued_hour"} for r in rows)
+
+
 def _submission(h):
     h.open_polls()
     v = h.voter("NSW1000001")
