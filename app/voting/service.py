@@ -303,3 +303,12 @@ class ElectionService:
         if self.status() != "tallied":
             self.set("status", "tallied")
         return {"result": result, "key_version": version, "signature": sig}
+
+    def latest_result(self):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT * FROM results ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        return {"result": json.loads(row["payload"]), "key_version": row["key_version"],
+                "signature": row["signature"],
+                "public_key_pem": self.keys.public_key_pem("results_sign", row["key_version"])}
