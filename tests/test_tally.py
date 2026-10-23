@@ -173,6 +173,11 @@ def test_equal_totals_when_filling_remaining_vacancies_use_candidate_id():
     assert res["elected"] == ["C", "A", "B"]
 
 
+def test_remaining_vacancies_filled_when_candidates_run_out():
+    res = count([["A"], ["B"]], ["A", "B"], 2)
+    assert sorted(res["elected"]) == ["A", "B"]
+
+
 def test_fewer_candidates_than_vacancies_elects_everyone_without_error():
     res = count([["A"], ["B"], ["A"]], ["A", "B"], 5)
     assert sorted(res["elected"]) == ["A", "B"]
