@@ -117,3 +117,11 @@ def test_no_link_between_voter_and_ballot(h, svc):                          # SR
     assert ballot_row["credential_hash"] not in audit_text
     assert ballot_row["ballot_hash"] not in audit_text
     assert "NSW1000001" not in audit_text                # enrolment id never logged in clear
+
+
+def test_ballot_stored_encrypted(h, svc):                                   # SR-05
+    h.open_polls()
+    h.voter("NSW1000001").cast({"atl": {"A": 1}})
+    with svc.dbs.connect("ballot") as c:
+        env = c.execute("SELECT envelope FROM ballots").fetchone()[0]
+    assert '"atl"' not in env and "wrapped_key" in env
