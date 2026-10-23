@@ -60,6 +60,27 @@ class VoterClient:
         self.terminal_id = terminal_id
         self.credential = self._load_wallet()
 
+    # ---- helpers
+    def _auth(self):
+        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+    def _check(self, status, data, ok=(200, 201)):
+        if status not in ok:
+            raise ClientError(f"{status}: {data.get('error', data)}")
+        return data
+
+    # ---- steps
+    def login(self, enrolment_id, password, code):
+        s, d = self.t.request("POST", "/api/auth/voter/login",
+                              {"enrolment_id": enrolment_id, "password": password, "totp": code})
+        self.token = self._check(s, d)["token"]
+        return d
+
+    def load_election(self):
+        s, d = self.t.request("GET", "/api/election")
+        self.election = self._check(s, d)
+        return self.election
+
     # ---- wallet: keeps the credential so the voter can re-vote (SR-30)
     def _load_wallet(self):
         if not self.wallet_path or not self.wallet_path.exists():
