@@ -1,4 +1,21 @@
-"""Senate ballot formality validation (SR-12)."""
+"""Senate ballot formality validation (SR-12).
+
+Rules implemented (Commonwealth Electoral Act 1918, s.268A/269 as amended in
+2016, simplified for the prototype):
+
+Above the line (ATL)
+  * Formal if the number 1 appears in exactly one group box.
+  * Preferences count in sequence 1, 2, 3 ... and stop at the first missing or
+    repeated number (savings provision). Voters are told to number at least 6.
+  * Each group preference is expanded to that group's candidates in ballot order.
+
+Below the line (BTL)
+  * Formal if the numbers 1 to 6 (or 1..N if fewer than 6 candidates) each
+    appear exactly once. Counting stops at the first break after that.
+
+If both are completed, a formal BTL vote takes precedence; otherwise the ATL
+vote is used.
+"""
 from dataclasses import dataclass, field
 
 
@@ -84,6 +101,7 @@ def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
             msg += f" (number {min(dupes)} is used more than once)"
         if not atl:
             return FormalityResult(False, errors=[msg])
+        warnings.append(msg + " - falling back to your above-the-line vote")
 
     # ---- above the line
     if atl:
@@ -91,7 +109,8 @@ def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
         if not seq:
             reason = ("the number 1 appears in more than one box" if len(by_number.get(1, [])) > 1
                       else "there is no number 1")
-            return FormalityResult(False, errors=[f"Above the line: informal because {reason}"])
+            return FormalityResult(False, errors=[f"Above the line: informal because {reason}"],
+                                   warnings=warnings)
         if len(seq) < len(atl):
             warnings.append(f"Above the line: counting stops after preference {len(seq)} "
                             "because of a missing or repeated number")
@@ -101,4 +120,4 @@ def validate(ballot: dict, groups: dict, candidates: list) -> FormalityResult:
         order = [cid for g in seq for cid in groups[g]]
         return FormalityResult(True, "atl", order, [], warnings)
 
-    return FormalityResult(False, errors=["The ballot is blank"])
+    return FormalityResult(False, errors=["The ballot is blank"], warnings=warnings)

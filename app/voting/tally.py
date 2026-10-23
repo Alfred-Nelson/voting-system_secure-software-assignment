@@ -45,6 +45,8 @@ def count(preference_orders, candidates, vacancies, excluded=()):
     piles = {c: [] for c in candidates}
     exhausted = Fraction(0)
     rounds = []
+    prev_totals = {c: Fraction(0) for c in candidates}
+
     def place(paper):
         nonlocal exhausted
         while paper.pos < len(paper.order) and paper.order[paper.pos] not in continuing:
@@ -62,7 +64,6 @@ def count(preference_orders, candidates, vacancies, excluded=()):
 
     pending_surplus = []
     round_no = 0
-    prev_totals = {c: Fraction(0) for c in candidates}
     while len(elected) < vacancies and continuing:
         round_no += 1
         t = totals()
