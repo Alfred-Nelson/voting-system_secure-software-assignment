@@ -183,6 +183,13 @@ def test_excluded_candidate_is_never_used_to_fill_a_vacancy():
     assert res["elected"] == ["A", "B"]
 
 
+def test_exclusion_transfers_preferences():
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["D", "B"]] * 2
+    res = count(orders, CANDS, 1)
+    assert res["elected"] == ["B"]           # D excluded, both papers go to B -> 5 beats A's 4
+    assert any("excluded C" in r["action"] for r in res["rounds"])
+
+
 def test_lowest_candidate_is_excluded_and_papers_transfer():
     # 9 ballots, quota 5. C (0) and D (2) are excluded; D's papers move to B, giving B 5.
     orders = [["A"]] * 4 + [["B"]] * 3 + [["D", "B"]] * 2
