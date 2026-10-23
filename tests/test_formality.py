@@ -29,3 +29,9 @@ def test_patterns(ballot, formal, used, order):
     assert res.order == order
     if not formal:
         assert res.errors                                   # always a clear message
+
+
+def test_btl_takes_precedence_when_both_formal():
+    b = {"atl": {"C": 1}, "btl": {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5, "C2": 6}}
+    res = validate(b, GROUPS, CANDS)
+    assert res.used == "btl" and any("below-the-line vote is used" in w for w in res.warnings)
