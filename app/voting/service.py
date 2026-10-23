@@ -165,5 +165,11 @@ class ElectionService:
             token = int(token_hex, 16)
             if not blind.verify(blind.message_int(spki, n), token, n, e):
                 raise VotingError("credential was not issued by the AEC", 403)
+            if not isinstance(envelope, dict) or set(envelope) != {"wrapped_key", "iv",
+                                                                   "ciphertext"}:
+                raise VotingError("malformed ballot envelope")
+            # SR-09: every ballot must use the fixed-size envelope
+            if len(b64d(envelope["ciphertext"])) != self.cfg.BALLOT_PAD_BYTES + 16:
+                raise VotingError("ballot envelope has the wrong size")
         except (TypeError, ValueError):
             raise VotingError("malformed ballot submission")
