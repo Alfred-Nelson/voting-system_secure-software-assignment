@@ -96,3 +96,9 @@ def test_replayed_ballot_rejected(h, http):
     _, sub = _submission(h)
     assert http.post("/api/ballots", json=sub).status_code == 201
     assert http.post("/api/ballots", json=sub).status_code == 409
+
+
+def test_identified_submission_refused(h, http):                            # SR-07
+    v, sub = _submission(h)
+    r = http.post("/api/ballots", json=sub, headers={"Authorization": "Bearer abc"})
+    assert r.status_code == 400
