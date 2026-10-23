@@ -127,3 +127,44 @@ def test_election_stops_when_vacancies_are_filled():
 def test_surplus_papers_with_no_further_preference_are_exhausted_safely():
     orders = [["A"]] * 8 + [["B"]] * 2
     assert count(orders, CANDS, 2)["elected"] == ["A"]
+
+
+def test_lowest_candidate_is_excluded_and_papers_transfer():
+    # 9 ballots, quota 5. C (0) and D (2) are excluded; D's papers move to B, giving B 5.
+    orders = [["A"]] * 4 + [["B"]] * 3 + [["D", "B"]] * 2
+    res = count(orders, CANDS, 1)
+    assert res["quota"] == 5
+    assert res["elected"] == ["B"]
+
+
+def test_exclusion_tie_on_current_total_goes_to_lower_candidate_id():
+    # A and B tie on 2. A (lower id) is excluded and its papers give C 5 >= quota 4.
+    # Excluding B instead would send B's papers to A and elect A.
+    orders = [["A", "C"]] * 2 + [["B", "A"]] * 2 + [["C"]] * 3
+    res = count(orders, ["A", "B", "C"], 1)
+    assert res["quota"] == 4
+    assert res["elected"] == ["C"]
+
+
+def test_exclusion_tie_is_broken_by_lower_previous_total_before_candidate_id():
+    # After D is excluded A and B tie on 3, but B had the lower previous total (2),
+    # so B is excluded (candidate id alone would exclude A, which would elect B instead).
+    orders = ([["A", "B"]] * 3 + [["B", "C"]] * 2 + [["C"]] * 5 + [["D", "B", "A"]])
+    res = count(orders, CANDS, 1)
+    assert res["quota"] == 6
+    assert res["elected"] == ["C"]
+
+
+def test_exclusion_is_deterministic_for_any_ballot_order():
+    orders = [["A", "C"]] * 2 + [["B", "A"]] * 2 + [["C"]] * 3 + [["D", "B"]]
+    forward = count(orders, CANDS, 1)
+    backward = count(list(reversed(orders)), CANDS, 1)
+    assert forward == backward
+
+
+def test_known_vector_with_surplus_then_exclusion():
+    # D excluded -> B reaches quota 7 (8); B's surplus goes to C at 1/8; C excluded -> A elected.
+    orders = [["A", "C"]] * 6 + [["B", "C"]] * 5 + [["C", "A"]] * 4 + [["D", "B"]] * 3
+    res = count(orders, CANDS, 2)
+    assert res["quota"] == 7
+    assert res["elected"] == ["B", "A"]
