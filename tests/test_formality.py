@@ -40,3 +40,15 @@ def test_btl_takes_precedence_when_both_formal():
 def test_informal_btl_falls_back_to_atl():
     res = validate({"atl": {"C": 1}, "btl": {"A1": 1}}, GROUPS, CANDS)
     assert res.formal and res.used == "atl"
+
+
+@pytest.mark.parametrize("ballot,needle", [
+    ({"atl": {"Z": 1}}, "unknown box"),
+    ({"atl": {"A": "one"}}, "whole number"),
+    ({"atl": {"A": 9}}, "out of range"),
+    ({"atl": {"A": -1}}, "out of range"),
+    ({"btl": "A1"}, "must be an object"),
+])
+def test_malformed_input_rejected_with_message(ballot, needle):
+    res = validate(ballot, GROUPS, CANDS)
+    assert not res.formal and any(needle in e for e in res.errors)
