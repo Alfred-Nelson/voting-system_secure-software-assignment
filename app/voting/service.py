@@ -188,3 +188,7 @@ class ElectionService:
                 if conn.execute(f"SELECT 1 FROM {table} WHERE ballot_hash = ?",  # nosec B608
                                 (bh,)).fetchone():
                     raise VotingError("duplicate ballot (replay)", 409)
+            # SR-30: a newer ballot from the same anonymous credential replaces the older one
+            for table in ("ballots", "ballot_pool"):
+                conn.execute(f"UPDATE {table} SET superseded = 1 WHERE credential_hash = ? "  # nosec B608
+                             "AND superseded = 0", (credential_hash,))

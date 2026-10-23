@@ -268,3 +268,65 @@ def test_same_credential_with_a_new_envelope_is_not_a_replay(svc, open_election)
     second = make_envelope(svc, b'{"atl":{"B":1}}')      # a re-vote: new ciphertext, new hash
     open_election.submit_ballot(cred, token, second, sign_envelope(key, second))
 
+
+# ---- Task 5: older ballots from the same credential_hash are marked superseded ----------
+def _flag(svc, table, cred, env, sig):
+    with svc.dbs.connect("ballot") as conn:
+        row = conn.execute(f"SELECT superseded FROM {table} WHERE ballot_hash = ?",  # nosec B608
+                           (_hash_of(cred, env, sig),)).fetchone()
+    return row["superseded"]
+
+
+def _revote(svc, table, key, cred, text=b'{"atl":{"A":1}}'):
+    """An earlier ballot from this credential, already stored in `table`."""
+    env = make_envelope(svc, text)
+    sig = sign_envelope(key, env)
+    _store(svc, table, cred, env, sig)
+    return env, sig
+
+
+@pytest.mark.parametrize("table", ["ballots", "ballot_pool"])                       # SR-30
+def test_older_ballot_from_same_credential_marked_superseded(svc, open_election, table):
+    key, cred, token = make_credential(svc, with_key=True)
+    env, sig = _revote(svc, table, key, cred)
+    assert _flag(svc, table, cred, env, sig) == 0
+    new_env = make_envelope(svc, b'{"atl":{"B":1}}')
+    open_election.submit_ballot(cred, token, new_env, sign_envelope(key, new_env))
+    assert _flag(svc, table, cred, env, sig) == 1
+
+
+def test_every_older_ballot_in_both_tables_superseded(svc, open_election):
+    key, cred, token = make_credential(svc, with_key=True)
+    stored = [(t, *_revote(svc, t, key, cred, text))
+              for t, text in [("ballots", b"1"), ("ballots", b"2"), ("ballot_pool", b"3")]]
+    new_env = make_envelope(svc, b"4")
+    open_election.submit_ballot(cred, token, new_env, sign_envelope(key, new_env))
+    assert [_flag(svc, t, cred, env, sig) for t, env, sig in stored] == [1, 1, 1]
+
+
+def test_ballots_from_other_credentials_untouched(svc, open_election):
+    other_key, other_cred, _ = make_credential(svc, with_key=True)
+    env, sig = _revote(svc, "ballots", other_key, other_cred)
+    open_election.submit_ballot(*make_submission(svc))
+    assert _flag(svc, "ballots", other_cred, env, sig) == 0
+
+
+def test_replay_does_not_supersede_the_newer_ballot(svc, open_election):
+    # Replaying an old ballot must be refused without touching the voter's latest one.
+    key, cred, token = make_credential(svc, with_key=True)
+    old_env, old_sig = _revote(svc, "ballots", key, cred, b"old")
+    new_env, new_sig = _revote(svc, "ballot_pool", key, cred, b"new")
+    with pytest.raises(VotingError, match="duplicate ballot"):
+        open_election.submit_ballot(cred, token, old_env, old_sig)
+    assert _flag(svc, "ballot_pool", cred, new_env, new_sig) == 0
+
+
+def test_rejected_ballot_does_not_supersede_anything(svc, open_election):
+    key, cred, token = make_credential(svc, with_key=True)
+    env, sig = _revote(svc, "ballots", key, cred)
+    bad_env = make_envelope(svc)
+    with pytest.raises(VotingError):                      # signed by someone else
+        open_election.submit_ballot(cred, token, bad_env,
+                                    sign_envelope(ec.generate_private_key(ec.SECP256R1()), bad_env))
+    assert _flag(svc, "ballots", cred, env, sig) == 0
+
