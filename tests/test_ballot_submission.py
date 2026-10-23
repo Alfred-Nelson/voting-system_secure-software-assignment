@@ -11,11 +11,22 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from app import create_app
 from app.security import blind
 from app.security.crypto import (b64d, b64e, ecdsa_sign_raw, envelope_signing_bytes,
                                  hybrid_encrypt, pad_fixed, sha256_hex)
 from app.voting.ledger import ballot_hash
 from app.voting.service import VotingError
+from tests.conftest import _Cfg
+
+
+class _PoolCfg(_Cfg):
+    MIX_BATCH_SIZE = 100          # keep ballots in ballot_pool; a flush would empty it
+
+
+@pytest.fixture
+def app(tmp_path):
+    return create_app(_PoolCfg, tmp_path / "data")
 
 
 def make_credential(svc, issued=True, curve=None, with_key=False):

@@ -5,6 +5,7 @@ Flow:
                    blind-sign the voter's anonymous credential
 """
 import json
+import secrets
 import uuid
 from datetime import date, datetime, timezone
 
@@ -50,6 +51,8 @@ class ElectionService:
         old = self.status()
         if new_status not in allowed.get(old, set()):
             raise VotingError(f"cannot change election from '{old}' to '{new_status}'")
+        if new_status == "closed":
+            self.flush_pool()          # last partial mixing batch enters the ledger
         self.set("status", new_status)
         self.audit.record("election.status_changed", actor, role,
                           {"before": old, "after": new_status})
@@ -198,9 +201,33 @@ class ElectionService:
                          "ballot_hash) VALUES (?,?,?,?,?)",
                          (str(uuid.uuid4()), credential_hash, envelope_json, signature_b64, bh))
             receipt = self._issue_receipt(conn, bh)
+            pool_size = conn.execute("SELECT COUNT(*) FROM ballot_pool").fetchone()[0]
+            if pool_size >= self.cfg.MIX_BATCH_SIZE:
+                self._flush_pool(conn)
         # Nothing is audited per ballot: a per-ballot audit entry would put a timestamp
         # next to each submission and let someone line it up with logins (SR-07, SR-09).
         return receipt
+
+    def _flush_pool(self, conn):
+        """SR-09 / SR-11: shuffle the pending batch with a CSPRNG, then move it into
+        the ballot store and append it to the ledger in that random order."""
+        rows = [dict(r) for r in conn.execute("SELECT * FROM ballot_pool")]
+        if not rows:
+            return 0
+        secrets.SystemRandom().shuffle(rows)
+        for r in rows:
+            conn.execute("INSERT INTO ballots (id, credential_hash, envelope, signature, "
+                         "ballot_hash, superseded) VALUES (?,?,?,?,?,?)",
+                         (r["id"], r["credential_hash"], r["envelope"], r["signature"],
+                          r["ballot_hash"], r["superseded"]))
+            self.ledger.append_in(conn, r["ballot_hash"])
+        conn.execute("DELETE FROM ballot_pool")
+        self.audit.record("ballots.batch_mixed", "system", "system", {"ballots": len(rows)})
+        return len(rows)
+
+    def flush_pool(self):
+        with self.dbs.transaction("ballot") as conn:
+            return self._flush_pool(conn)
 
     def _issue_receipt(self, conn, bh):
         """SR-15: receipt code derived from the ballot hash; reveals nothing about
@@ -210,3 +237,19 @@ class ElectionService:
         version, sig = self.keys.sign("receipt_sign", f"{code}|{hour}".encode())
         conn.execute("INSERT INTO receipts VALUES (?,?,?,?)", (code, hour, version, sig))
         return {"receipt": code, "issued_hour": hour, "key_version": version, "signature": sig}
+
+    def bulletin(self):
+        """Public bulletin board. Deliberately does NOT show whether a receipt
+        was superseded by a re-vote - otherwise a coercer could check (SR-30)."""
+        with self.dbs.connect("ballot") as conn:
+            rows = conn.execute("SELECT code, issued_hour FROM receipts ORDER BY code").fetchall()
+        return [dict(r) for r in rows]
+
+    def check_receipt(self, code):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT * FROM receipts WHERE code = ?", (code.upper(),)).fetchone()
+        if not row:
+            return {"found": False}
+        valid = self.keys.verify("receipt_sign", row["key_version"], row["signature"],
+                                 f"{row['code']}|{row['issued_hour']}".encode())
+        return {"found": True, "issued_hour": row["issued_hour"], "signature_valid": valid}

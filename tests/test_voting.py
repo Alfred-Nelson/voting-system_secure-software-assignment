@@ -6,6 +6,17 @@ from client.voter_client import ClientError
 BALLOT = {"atl": {"A": 1, "B": 2, "C": 3}}
 
 
+def test_full_vote_produces_verifiable_receipt(h, http):
+    h.open_polls()
+    v = h.voter("NSW1000001")
+    receipt = v.cast(BALLOT)
+    assert receipt["receipt"].count("-") == 4
+    check = v.verify_receipt(receipt["receipt"])
+    assert check == {"found": True, "issued_hour": receipt["issued_hour"], "signature_valid": True}
+    codes = [r["code"] for r in http.get("/api/bulletin").get_json()["receipts"]]
+    assert receipt["receipt"] in codes
+
+
 def test_voting_closed_before_polls_open(h):
     v = h.voter("NSW1000001")
     with pytest.raises(ClientError, match="not open"):
