@@ -2,6 +2,20 @@
 
 
 # ---------------------------------------------------------------- SR-14
+def _publish(h, http):
+    h.open_polls()
+    h.voter("NSW1000001").cast({"atl": {"B": 1}})
+    adm = h.staff("admin1")
+    http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    http.post("/api/admin/tally", headers=adm)
+
+
+def test_results_require_client_key(h, http, creds):
+    _publish(h, http)
+    assert http.get("/api/results").status_code == 401
+    assert http.get("/api/results", headers={"X-API-Key": "wrong"}).status_code == 401
+
+
 def test_cannot_count_while_polls_open(h, http):
     h.open_polls()
     r = http.post("/api/admin/tally", headers=h.staff("admin1"))
