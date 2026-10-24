@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Public Bulletin Board</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>Public Bulletin Board</h1>
+  <nav><a href="/">Vote</a><a href="/board">Bulletin board</a><a href="/admin">Staff</a></nav>
+</header>
+<main>
+  <section class="panel">
+    <h2>Check your receipt (SR-15)</h2>
+    <p class="muted">Enter the code you received after voting. The board confirms your ballot was recorded and
+      that the receipt carries a valid AEC signature. It never shows how anyone voted, and it does not show whether
+      a receipt was replaced by a later re-vote (so nobody can use it to check up on a voter - SR-30).</p>
+    <form id="check-form">
+      <label for="code">Receipt code</label>
+      <input id="code" required maxlength="30" placeholder="ABCD-1234-…">
+      <button type="submit">Check</button>
+    </form>
+    <div id="check-msg"></div>
+  </section>
+  <section class="panel">
+    <h2>All recorded receipts <span id="count" class="badge"></span></h2>
+    <div class="table-wrap"><table><thead><tr><th>Receipt code</th><th>Issued (hour, UTC)</th></tr></thead>
+      <tbody id="receipts"></tbody></table></div>
+  </section>
+</main>
+<script src="/static/board.js"></script>
+</body>
+</html>
