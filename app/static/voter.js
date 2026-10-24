@@ -9,6 +9,7 @@
   const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------- encoding helpers
+  const enc = new TextEncoder();
   const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
   const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
   const sha256 = async (data) => crypto.subtle.digest("SHA-256", data);
@@ -87,6 +88,9 @@
     const d = document.createElement("div");
     d.className = "msg " + kind; d.textContent = text; $(el).appendChild(d);
   }
+  function step(name) {
+    document.querySelector(`#steps li[data-step="${name}"]`).classList.add("done");
+  }
   function checkBallot() {
     const groups = Object.fromEntries(election.groups.map(g => [g.code, g.candidates]));
     const res = Formality.validate(readBallot(), groups, election.candidates.map(c => c.id));
@@ -110,5 +114,30 @@
     const jwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
     localStorage.setItem(walletKey, JSON.stringify({ jwk, spki: b64(spki), token: sig.toString(16) }));
     return { key: pair.privateKey, spki, token: sig.toString(16) };
+  }
+
+  // ---------------------------------------------------------------- encrypt + sign (SR-05/09/10)
+  async function buildSubmission(ballot, cred) {
+    const json = enc.encode(JSON.stringify(ballot));
+    const size = election.pad_bytes;
+    if (json.length + 4 > size) throw new Error("ballot too large");
+    const padded = new Uint8Array(size);                         // [len:4][json][random]
+    new DataView(padded.buffer).setUint32(0, json.length);
+    padded.set(json, 4);
+    crypto.getRandomValues(padded.subarray(4 + json.length));
+
+    const aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, padded);
+    const rsaPub = await crypto.subtle.importKey("spki", pemToDer(election.keys.ballot_encryption_pem),
+      { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+    const wrapped = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, rsaPub,
+      await crypto.subtle.exportKey("raw", aesKey));
+    const envelope = { wrapped_key: b64(wrapped), iv: b64(iv), ciphertext: b64(ct) };
+    step("encrypt");
+    const msg = enc.encode(`v1|${envelope.wrapped_key}|${envelope.iv}|${envelope.ciphertext}`);
+    const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, cred.key, msg);
+    step("sign");
+    return { credential: b64(cred.spki), token: cred.token, envelope, signature: b64(sig) };
   }
 })();
