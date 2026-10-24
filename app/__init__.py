@@ -7,10 +7,11 @@ from types import SimpleNamespace
 
 from flask import Flask, jsonify, request
 
-from .config import Config
+from .config import BASE_DIR, Config
 from .db import Databases
 from .security.audit import AuditLog
 from .security.auth import Authenticator
+from .security.integrity import verify_release
 from .security.keys import KeyManager
 from .security.monitor import Monitor
 from .security.ratelimit import RateLimiter
@@ -38,6 +39,16 @@ def _master_key(cfg, data_dir: Path) -> bytes:
 
 def create_app(config_object=Config, data_dir=None):
     cfg = config_object
+    app_dir = Path(__file__).resolve().parent
+
+    # SR-25: refuse to start if the code does not match the signed release
+    if cfg.REQUIRE_SIGNED_BUILD:
+        ok, reason = verify_release(app_dir, BASE_DIR / "release" / "manifest.json",
+                                    BASE_DIR / "release" / "release_public.pem")
+        if not ok:
+            raise SystemExit(f"[SR-25] Refusing to start: {reason}")
+        log.info("[SR-25] %s", reason)
+
     data_dir = Path(data_dir or cfg.DATA_DIR)
     app = Flask(__name__)
     app.config.from_object(cfg)
