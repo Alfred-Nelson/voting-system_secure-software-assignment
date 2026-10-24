@@ -1,7 +1,7 @@
 """Results API (SR-14)."""
 import hashlib
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
 from ..security.ratelimit import limit
 from . import svc
@@ -37,3 +37,8 @@ def results():
         return jsonify(error="no results published yet"), 404
     svc().audit.record("results.served", client, "api_client", {})
     return jsonify(latest)
+
+
+@bp.get("/")
+def index():
+    return send_from_directory(current_app.static_folder, "index.html")
