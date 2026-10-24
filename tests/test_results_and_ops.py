@@ -33,6 +33,13 @@ def test_results_signature_verifies_and_detects_change(h, http, creds):
         pub.verify(base64.b64decode(data["signature"]), tampered)
 
 
+def test_results_rate_limited_100_per_minute(h, http, creds):
+    _publish(h, http)
+    hdr = {"X-API-Key": creds["results_api_key"]}
+    codes = [http.get("/api/results", headers=hdr).status_code for _ in range(101)]
+    assert codes[:100] == [200] * 100 and codes[100] == 429
+
+
 def test_cannot_count_while_polls_open(h, http):
     h.open_polls()
     r = http.post("/api/admin/tally", headers=h.staff("admin1"))
