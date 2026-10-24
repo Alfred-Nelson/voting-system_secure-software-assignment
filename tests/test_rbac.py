@@ -36,6 +36,12 @@ def test_voter_cannot_use_staff_endpoints(h, http):
     assert r.status_code == 403
 
 
+def test_audit_verify_on_untouched_log_is_ok(h, http):
+    r = http.get("/api/audit/verify", headers=h.staff("auditor1"))
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+
 def test_delegate_limited_to_own_state_with_alert(h, http, svc):
     hdr = h.staff("delegate_nsw1")
     assert http.put("/api/admin/candidates/A1", json={"name": "Mia T."}, headers=hdr).status_code == 200
