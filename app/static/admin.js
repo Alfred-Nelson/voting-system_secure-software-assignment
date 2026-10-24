@@ -31,6 +31,8 @@
     return data;
   }
 
+  const can = (p) => (PERMS[me.role] || []).includes(p);
+
   // ---------------------------------------------------------------- login
   function signedOut(reason) {
     token = null; me = null;
@@ -54,9 +56,33 @@
       $("who").textContent = me.role; $("who").classList.remove("hidden");
       $("login-panel").classList.add("hidden"); $("console").classList.remove("hidden");
       msg("login-msg", "", "");
+      buildTabs();
     } catch (err) { msg("login-msg", err.message, "bad"); }
   });
   $("logout-btn").addEventListener("click", async () => {
     await api("POST", "/api/auth/logout").catch(() => {}); signedOut("Signed out.");
   });
+
+  // Only tabs whose permission the role has are shown (UI only - the server enforces it).
+  function buildTabs() {
+    const tabs = $("tabs"); tabs.innerHTML = "";
+    let first = null;
+    document.querySelectorAll(".tab").forEach(panel => {
+      const ok = can(panel.dataset.perm);
+      panel.classList.add("hidden");
+      if (!ok) return;
+      const b = document.createElement("button"); b.type = "button"; b.textContent = panel.querySelector("h2").textContent.replace(/\s*\(.*\)/, "");
+      b.addEventListener("click", () => select(panel.dataset.tab));
+      b.dataset.tab = panel.dataset.tab; tabs.appendChild(b);
+      first = first || panel.dataset.tab;
+    });
+    document.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !can("keys.rotate")));
+    if (first) select(first);
+  }
+  const loaders = {};
+  function select(name) {
+    document.querySelectorAll(".tab").forEach(p => p.classList.toggle("hidden", p.dataset.tab !== name));
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    if (loaders[name]) loaders[name]().catch(() => {});
+  }
 })();
