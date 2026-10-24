@@ -6,6 +6,8 @@
 import argparse
 import logging
 import ssl
+import threading
+import time
 from pathlib import Path
 
 from app import create_app
@@ -21,6 +23,14 @@ class DropBallotAccessLogs(logging.Filter):
         return "/api/ballots" not in record.getMessage()
 
 
+def monitor_loop(app):
+    """Background job: mark silent terminals offline (SR-20)."""
+    while True:
+        time.sleep(15)
+        with app.app_context():
+            app.evote.monitor.check_terminals()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tls", action="store_true", help="serve HTTPS with TLS 1.3 only")
@@ -30,6 +40,7 @@ def main():
 
     logging.getLogger("werkzeug").addFilter(DropBallotAccessLogs())
     app = create_app()
+    threading.Thread(target=monitor_loop, args=(app,), daemon=True).start()
 
     ssl_ctx = None
     if args.tls:
