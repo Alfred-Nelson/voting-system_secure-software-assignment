@@ -84,3 +84,33 @@ def test_key_status_permissions(h, http, svc):
     assert r.status_code == 403
     assert any(e["action"] == "access.denied" and e["actor"] == "officer1"
                for e in svc.audit.entries())
+
+
+# ---------------------------------------------------------------- POST /api/admin/keys/rotate
+def test_rotate_endpoint_rotates_and_raises_info_alert(h, http, svc):
+    before = svc.keys.key_status()
+    v1 = next(k for k in before if k["purpose"] == "receipt_sign")["current_version"]
+    r = http.post("/api/admin/keys/rotate", headers=h.staff("admin1"),
+                  json={"purpose": "receipt_sign", "reason": "test rotation"})
+    assert r.status_code == 200
+    assert r.get_json() == {"purpose": "receipt_sign", "version": v1 + 1}
+    assert any(a["kind"] == "keys.rotated" and a["severity"] == "info" for a in svc.monitor.alerts())
+    assert any(e["action"] == "key.rotated" and e["actor"] == "admin1"
+               for e in svc.audit.entries())
+
+
+def test_rotate_endpoint_rejects_election_scoped_and_unknown_keys(h, http, svc):
+    hdr = h.staff("admin1")
+    for purpose in ("blind", "ballot_enc", "pii_enc", "no_such_key"):
+        r = http.post("/api/admin/keys/rotate", headers=hdr, json={"purpose": purpose})
+        assert r.status_code == 400
+    assert not any(a["kind"] == "keys.rotated" for a in svc.monitor.alerts())
+
+
+def test_rotate_endpoint_denied_for_non_admins(h, http, svc):
+    assert http.post("/api/admin/keys/rotate", json={}).status_code == 401
+    for user in ("officer1", "auditor1", "delegate_nsw1"):
+        r = http.post("/api/admin/keys/rotate", headers=h.staff(user), json={"purpose": "backup"})
+        assert r.status_code == 403
+    assert any(e["action"] == "access.denied" and e["actor"] == "officer1"
+               for e in svc.audit.entries())
