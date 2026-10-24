@@ -21,3 +21,11 @@ def test_two_distinct_delegates_required(h, http, svc):
     assert r["status"] == "executed" and _excluded(svc, "U1")
     actions = [e for e in svc.audit.entries() if e["action"] == "candidate.excluded"]
     assert '"delegate_nsw1"' in actions[0]["details"] and '"delegate_nsw2"' in actions[0]["details"]
+
+
+def test_same_delegate_cannot_approve_twice(h, http):
+    rid = _request(http, h)
+    hdr = h.staff("delegate_nsw1")
+    http.post(f"/api/admin/approvals/{rid}/approve", headers=hdr)
+    r = http.post(f"/api/admin/approvals/{rid}/approve", headers=hdr)
+    assert r.status_code == 409
