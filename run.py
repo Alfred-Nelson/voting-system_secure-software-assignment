@@ -1,14 +1,35 @@
 """Start the prototype server.
 
     python run.py            # http://127.0.0.1:5000  (development)
+    python run.py --tls      # https://127.0.0.1:5443 TLS 1.3 ONLY (SR-05)
 """
+import argparse
+import ssl
+from pathlib import Path
+
 from app import create_app
+
+BASE = Path(__file__).resolve().parent
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tls", action="store_true", help="serve HTTPS with TLS 1.3 only")
+    args = ap.parse_args()
+
     app = create_app()
-    print("Serving on http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+
+    ssl_ctx = None
+    if args.tls:
+        cert, key = BASE / "certs" / "server.crt", BASE / "certs" / "server.key"
+        if not cert.exists():
+            raise SystemExit("No certificate found - run: python tools/gen_cert.py")
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3   # refuse TLS 1.2 and below
+        ssl_ctx.load_cert_chain(cert, key)
+    port = 5443 if args.tls else 5000
+    print(f"Serving on {'https' if ssl_ctx else 'http'}://127.0.0.1:{port}")
+    app.run(host="127.0.0.1", port=port, ssl_context=ssl_ctx, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
