@@ -47,3 +47,15 @@ def test_other_state_delegate_cannot_approve_exclusion(h, http):
     rid = _request(http, h)
     r = http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_vic1"))
     assert r.status_code == 403
+
+
+def test_recount_after_dual_approval(h, http):
+    h.open_polls()
+    h.voter("NSW1000001").cast({"atl": {"A": 1}})
+    adm = h.staff("admin1")
+    http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    http.post("/api/admin/tally", headers=adm)
+    rid = _request(http, h, action="recount", target=None)
+    http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_nsw1"))
+    r = http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_vic1")).get_json()
+    assert r["status"] == "executed" and r["outcome"]["recount_elected"][0] == "A1"
