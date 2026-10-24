@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff Console</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>AEC Staff Console <span id="who" class="badge hidden"></span></h1>
+  <nav><a href="/">Vote</a><a href="/board">Bulletin board</a><a href="/admin">Staff</a></nav>
+</header>
+<main>
+  <section id="login-panel" class="panel">
+    <h2>Staff sign-in (MFA required - SR-02)</h2>
+    <form id="login-form" autocomplete="off">
+      <div class="row">
+        <div><label for="username">Username</label><input id="username" required maxlength="40"></div>
+        <div><label for="password">Password</label><input id="password" type="password" required maxlength="128"></div>
+        <div><label for="totp">One-time code</label><input id="totp" required maxlength="6" inputmode="numeric"></div>
+      </div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="login-msg"></div>
+  </section>
+
+  <section id="console" class="hidden">
+    <div class="panel">
+      <span class="muted">Signed in as</span> <strong id="user"></strong> ·
+      <span class="muted">role</span> <span id="role" class="badge"></span> ·
+      <span class="muted">session ends after <strong id="idle"></strong>s idle</span>
+      <button id="logout-btn" class="secondary" type="button">Sign out</button>
+    </div>
+  </section>
+</main>
+<script src="/static/admin.js"></script>
+</body>
+</html>

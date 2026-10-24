@@ -42,3 +42,8 @@ def results():
 @bp.get("/")
 def index():
     return send_from_directory(current_app.static_folder, "index.html")
+
+
+@bp.get("/admin")
+def admin_page():
+    return send_from_directory(current_app.static_folder, "admin.html")
