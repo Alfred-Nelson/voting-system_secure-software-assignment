@@ -2,7 +2,7 @@
 MFA session (SR-02); every state change is audited (SR-18)."""
 from flask import Blueprint, g, jsonify
 
-from ..security.rbac import require
+from ..security.rbac import enforce_state_scope, require
 from ..voting.service import VotingError
 from . import body, svc
 
@@ -24,6 +24,25 @@ def set_status():
     try:
         svc().election.set_status(str(body().get("status", "")), *_actor())
         return jsonify(status=svc().election.status())
+    except VotingError as exc:
+        return _err(exc)
+
+
+# ---------------------------------------------------------------- candidates (SR-16 scope)
+@bp.put("/admin/candidates/<cid>")
+@require("candidates.edit")
+def edit_candidate(cid):
+    state = svc().election.candidate_state(cid)
+    if state is None:
+        return jsonify(error="candidate not found"), 404
+    denied = enforce_state_scope(state)
+    if denied:
+        return denied
+    try:
+        d = body()
+        fields = {k: str(v)[:120] for k, v in d.items() if k in ("name", "party")}
+        svc().election.update_candidate(cid, fields, *_actor())
+        return jsonify(ok=True)
     except VotingError as exc:
         return _err(exc)
 
