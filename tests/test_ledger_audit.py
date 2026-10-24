@@ -114,9 +114,10 @@ def test_admin_actions_are_audited_with_identity(h, http, svc):
 
 # ---------------------------------------------------------------- GET /api/audit
 def test_audit_endpoint_returns_latest_200_entries(h, http, svc):
+    hdr = h.staff("auditor1")                  # log in first so its audit entry isn't the newest
     for i in range(205):
         svc.audit.record("test.event", "tester", "admin", {"i": i})
-    r = http.get("/api/audit", headers=h.staff("auditor1"))
+    r = http.get("/api/audit", headers=hdr)
     assert r.status_code == 200
     entries = r.get_json()["entries"]
     assert len(entries) == 200
