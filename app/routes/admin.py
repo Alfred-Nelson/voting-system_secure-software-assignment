@@ -28,6 +28,34 @@ def set_status():
         return _err(exc)
 
 
+# ---------------------------------------------------------------- dual authorisation (SR-17)
+@bp.post("/admin/approvals")
+@require("approval.request")
+def request_approval():
+    d = body()
+    try:
+        rid = svc().approvals.request(str(d.get("action", "")), d.get("target"),
+                                      str(d.get("reason", "")), g.user)
+        return jsonify(request_id=rid), 201
+    except VotingError as exc:
+        return _err(exc)
+
+
+@bp.get("/admin/approvals")
+@require("approval.request")
+def list_approvals():
+    return jsonify(requests=svc().approvals.list())
+
+
+@bp.post("/admin/approvals/<int:rid>/approve")
+@require("approval.approve")
+def approve(rid):
+    try:
+        return jsonify(svc().approvals.approve(rid, g.user))
+    except VotingError as exc:
+        return _err(exc)
+
+
 # ---------------------------------------------------------------- polling station (SR-04)
 @bp.post("/station/mark-voted")
 @require("station.mark_voted")

@@ -15,6 +15,7 @@ from .security.keys import KeyManager
 from .security.monitor import Monitor
 from .security.ratelimit import RateLimiter
 from .security.sessions import SessionStore
+from .voting.approvals import ApprovalService
 from .voting.ledger import Ledger
 from .voting.service import ElectionService
 from .routes import admin, auth, ballots, public
@@ -56,6 +57,7 @@ def create_app(config_object=Config, data_dir=None):
     svc.auth = Authenticator(dbs, svc.keys, svc.audit, svc.monitor, svc.sessions, cfg)
     svc.ledger = Ledger(dbs, cfg.LEDGER_BATCH_SIZE)
     svc.election = ElectionService(dbs, svc.keys, svc.audit, svc.monitor, svc.ledger, cfg)
+    svc.approvals = ApprovalService(dbs, svc.audit, svc.election)
     app.evote = svc
 
     due = svc.keys.needs_rotation()
