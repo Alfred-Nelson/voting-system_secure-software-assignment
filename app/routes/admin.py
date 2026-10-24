@@ -4,7 +4,6 @@ from flask import Blueprint, g, jsonify
 
 from ..security.crypto import CryptoError
 from ..security.rbac import enforce_state_scope, require
-from ..security.crypto import CryptoError
 from ..voting.service import VotingError
 from . import body, svc
 
@@ -76,6 +75,7 @@ def approve(rid):
     except VotingError as exc:
         return _err(exc)
 
+
 # ---------------------------------------------------------------- keys (SR-26)
 @bp.get("/admin/keys")
 @require("keys.view")
@@ -129,8 +129,10 @@ def mark_voted():
                                          str(d.get("channel", "station")), g.user["username"])
         return jsonify(ok=True)
     except VotingError as exc:
-            return _err(exc)
+        return _err(exc)
 
+
+# ---------------------------------------------------------------- tally
 @bp.post("/admin/tally")
 @require("tally.run")
 def run_tally():
@@ -138,27 +140,6 @@ def run_tally():
         return jsonify(svc().election.run_tally(*_actor()))
     except VotingError as exc:
         return _err(exc)
-
-
-# ---------------------------------------------------------------- keys (SR-26)
-@bp.post("/admin/keys/rotate")
-@require("keys.rotate")
-def rotate_key():
-    d = body()
-    try:
-        version = svc().keys.rotate(str(d.get("purpose", "")), g.user["username"],
-                                    str(d.get("reason", "manual")))
-        svc().monitor.alert("info", "keys.rotated", f"{d.get('purpose')} rotated to v{version}")
-        return jsonify(purpose=d.get("purpose"), version=version)
-    except (CryptoError, KeyError) as exc:
-        return jsonify(error=str(exc)), 400
-
-
-# ---------------------------------------------------------------- monitoring (SR-20)
-@bp.get("/admin/alerts")
-@require("alerts.view")
-def alerts():
-    return jsonify(alerts=svc().monitor.alerts())
 
 
 # ---------------------------------------------------------------- auditor (SR-11, SR-19)
@@ -176,25 +157,11 @@ def audit_verify():
         svc().monitor.alert("critical", "audit.tamper", result["reason"])
     return jsonify(result)
 
+
 @bp.get("/ledger/verify")
 @require("ledger.verify")
 def ledger_verify():
     result = svc().ledger.verify()
     if not result["ok"]:
         svc().monitor.alert("critical", "ledger.tamper", "; ".join(result["problems"]))
-    return jsonify(result)
-
-
-@bp.get("/audit")
-@require("audit.view")
-def audit_entries():
-    return jsonify(entries=svc().audit.entries())
-
-
-@bp.get("/audit/verify")
-@require("audit.verify")
-def audit_verify():
-    result = svc().audit.verify_chain()
-    if not result["ok"]:
-        svc().monitor.alert("critical", "audit.tamper", result["reason"])
     return jsonify(result)
