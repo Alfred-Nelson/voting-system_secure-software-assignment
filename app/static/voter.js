@@ -5,6 +5,7 @@
 (() => {
   let election = null;
   let token = null;          // session token - only used to get the blind credential
+  let walletKey = null;      // localStorage key for this voter's credential
   const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------- encoding helpers
@@ -93,5 +94,21 @@
     else show("ballot-msg", `Formal (${res.used.toUpperCase()}). Preference order: ${res.order.join(" > ")}` +
       (res.warnings.length ? "\n\nNote:\n• " + res.warnings.join("\n• ") : ""), res.warnings.length ? "warn" : "ok");
     return res;
+  }
+
+  // ---------------------------------------------------------------- credential (SR-03/04/07)
+  async function obtainCredential() {
+    const n = BigInt("0x" + election.keys.blind_n), e = BigInt("0x" + election.keys.blind_e);
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
+    const m = BigInt("0x" + hex(await sha256(spki))) % n;
+    const r = randomBelow(n);
+    const blinded = (m * modPow(r, e, n)) % n;                  // m' = m * r^e mod n
+    const res = await api("POST", "/api/voter/credential", { blinded: blinded.toString(16) }, true);
+    const sig = (BigInt("0x" + res.blind_signature) * modInv(r, n)) % n;   // s = s' * r^-1
+    if (modPow(sig, e, n) !== m) throw new Error("AEC returned an invalid blind signature");
+    const jwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    localStorage.setItem(walletKey, JSON.stringify({ jwk, spki: b64(spki), token: sig.toString(16) }));
+    return { key: pair.privateKey, spki, token: sig.toString(16) };
   }
 })();
