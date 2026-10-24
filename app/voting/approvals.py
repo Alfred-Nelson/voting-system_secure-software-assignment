@@ -32,3 +32,12 @@ class ApprovalService:
                           {"request_id": rid, "action": action, "target": target,
                            "reason": reason})
         return rid
+
+    def list(self):
+        with self.dbs.connect("identity") as conn:
+            reqs = [dict(r) for r in conn.execute(
+                "SELECT * FROM approval_requests ORDER BY id DESC")]
+            for r in reqs:
+                r["approvals"] = [a["approver"] for a in conn.execute(
+                    "SELECT approver FROM approvals WHERE request_id = ? ORDER BY ts", (r["id"],))]
+        return reqs
