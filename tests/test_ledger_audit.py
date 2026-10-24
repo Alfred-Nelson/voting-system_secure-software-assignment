@@ -1,4 +1,5 @@
 """SR-11 ballot ledger, SR-18/SR-19 tamper-evident audit log."""
+import json
 import sqlite3
 
 import pytest
@@ -29,6 +30,19 @@ def test_ledger_is_append_only(h, http, svc):
             c.execute("DELETE FROM ledger")
         with pytest.raises(sqlite3.DatabaseError, match="append-only"):
             c.execute("UPDATE ledger SET item_hash = 'x'")
+
+
+def test_modified_ballot_blocks_the_count(h, http, svc):
+    adm = _vote_and_close(h, http, 3)
+    with sqlite3.connect(svc.dbs.paths["ballot"]) as c:
+        bid, env = c.execute("SELECT id, envelope FROM ballots LIMIT 1").fetchone()
+        e = json.loads(env)
+        e["iv"] = "AAAAAAAAAAAAAAAA"
+        c.execute("UPDATE ballots SET envelope = ? WHERE id = ?", (json.dumps(e), bid))
+    assert not svc.ledger.verify()["ok"]
+    r = http.post("/api/admin/tally", headers=adm)
+    assert r.status_code == 409 and "integrity" in r.get_json()["error"]
+    assert any(a["kind"] == "ledger.tamper" for a in svc.monitor.alerts())
 
 
 def test_deleted_ballot_detected(h, http, svc):

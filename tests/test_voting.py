@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from client.voter_client import ClientError
+from client.voter_client import ClientError, FlaskTransport, VoterClient
 
 BALLOT = {"atl": {"A": 1, "B": 2, "C": 3}}
 
@@ -82,6 +82,22 @@ def test_concurrent_credential_requests_only_one_succeeds(h, svc):        # SR-0
     for t in threads:
         t.join()
     assert results.count("ok") == 1 and results.count("refused") == 9
+
+
+def test_revote_only_latest_counted(h, http, tmp_path):                       # SR-30
+    h.open_polls()
+    wallet = tmp_path / "w.json"
+    v = h.voter("NSW1000001", wallet_path=wallet)
+    v.cast({"atl": {"A": 1}})
+    # later, on the same device (credential reloaded from the wallet), the voter changes their mind
+    v2 = VoterClient(FlaskTransport(http), wallet_path=wallet)
+    v2.cast({"atl": {"C": 1}})
+    h.voter("NSW1000002").cast({"atl": {"C": 1}})
+    adm = h.staff("admin1")
+    http.post("/api/admin/election/status", json={"status": "closed"}, headers=adm)
+    res = http.post("/api/admin/tally", headers=adm).get_json()["result"]
+    assert res["formal_ballots"] == 2                   # 3 submissions, 2 counted
+    assert res["elected"][0] == "C1"
 
 
 def test_bulletin_does_not_reveal_superseded_status(h, http, tmp_path):     # SR-30 coercion
