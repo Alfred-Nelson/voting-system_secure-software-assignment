@@ -180,4 +180,23 @@
       $("cast-btn").disabled = false;
     }
   }
+
+  // ---------------------------------------------------------------- login (SR-01)
+  async function login(ev) {
+    ev.preventDefault();
+    show("login-msg", "", "");
+    try {
+      const enrol = $("enrol").value.trim().toUpperCase();
+      const r = await api("POST", "/api/auth/voter/login",
+        { enrolment_id: enrol, password: $("password").value, totp: $("totp").value.trim() });
+      token = r.token;
+      walletKey = "evote-credential-" + hex(await sha256(enc.encode(enrol))).slice(0, 16);
+      $("password").value = ""; $("totp").value = "";
+      $("login-panel").classList.add("hidden");
+      $("ballot-panel").classList.remove("hidden");
+      if (election.status !== "open") show("ballot-msg", "Voting is not open yet.", "warn");
+    } catch (err) {
+      show("login-msg", err.message, "bad");
+    }
+  }
 })();
