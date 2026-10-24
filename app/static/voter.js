@@ -72,4 +72,26 @@
         c.party + (c.group_code ? ` (Group ${c.group_code})` : " (Ungrouped)")));
     }
   }
+  function readBallot() {
+    const ballot = { atl: {}, btl: {} };
+    document.querySelectorAll("[data-atl]").forEach(i => { if (i.value.trim()) ballot.atl[i.dataset.atl] = i.value.trim(); });
+    document.querySelectorAll("[data-btl]").forEach(i => { if (i.value.trim()) ballot.btl[i.dataset.btl] = i.value.trim(); });
+    return ballot;
+  }
+
+  // ---------------------------------------------------------------- formality check (SR-12)
+  function show(el, text, kind) {
+    $(el).replaceChildren();
+    if (!text) return;
+    const d = document.createElement("div");
+    d.className = "msg " + kind; d.textContent = text; $(el).appendChild(d);
+  }
+  function checkBallot() {
+    const groups = Object.fromEntries(election.groups.map(g => [g.code, g.candidates]));
+    const res = Formality.validate(readBallot(), groups, election.candidates.map(c => c.id));
+    if (!res.formal) show("ballot-msg", "Not yet formal:\n• " + res.errors.join("\n• "), "bad");
+    else show("ballot-msg", `Formal (${res.used.toUpperCase()}). Preference order: ${res.order.join(" > ")}` +
+      (res.warnings.length ? "\n\nNote:\n• " + res.warnings.join("\n• ") : ""), res.warnings.length ? "warn" : "ok");
+    return res;
+  }
 })();
