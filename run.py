@@ -15,6 +15,8 @@ BASE = Path(__file__).resolve().parent
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tls", action="store_true", help="serve HTTPS with TLS 1.3 only")
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int)
     args = ap.parse_args()
 
     app = create_app()
@@ -27,9 +29,9 @@ def main():
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3   # refuse TLS 1.2 and below
         ssl_ctx.load_cert_chain(cert, key)
-    port = 5443 if args.tls else 5000
-    print(f"Serving on {'https' if ssl_ctx else 'http'}://127.0.0.1:{port}")
-    app.run(host="127.0.0.1", port=port, ssl_context=ssl_ctx, debug=False, threaded=True)
+    port = args.port or (5443 if args.tls else 5000)
+    print(f"Serving on {'https' if ssl_ctx else 'http'}://{args.host}:{port}")
+    app.run(host=args.host, port=port, ssl_context=ssl_ctx, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
