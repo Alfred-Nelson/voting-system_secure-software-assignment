@@ -1,6 +1,13 @@
 """Election status rules and general hardening (results, backup and monitoring tests are added in later issues)."""
 
 
+# ---------------------------------------------------------------- SR-14
+def test_cannot_count_while_polls_open(h, http):
+    h.open_polls()
+    r = http.post("/api/admin/tally", headers=h.staff("admin1"))
+    assert r.status_code == 409
+
+
 # ---------------------------------------------------------------- hardening
 def test_security_headers(http):
     r = http.get("/api/election")
