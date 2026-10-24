@@ -6,6 +6,7 @@ start-up the server re-hashes its own code and refuses to run if any file was
 added, removed or changed, or if the manifest signature is invalid.
 """
 import hashlib
+import json
 from pathlib import Path
 
 TRACKED_SUFFIXES = {".py", ".js", ".html", ".css"}
@@ -18,3 +19,7 @@ def build_manifest(app_dir: Path) -> dict:
             rel = path.relative_to(app_dir).as_posix()
             files[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return {"version": 1, "files": files}
+
+
+def manifest_bytes(manifest: dict) -> bytes:
+    return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
