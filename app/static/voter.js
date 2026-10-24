@@ -3,7 +3,9 @@
 "use strict";
 
 (() => {
+  let election = null;
   let token = null;          // session token - only used to get the blind credential
+  const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------- encoding helpers
   const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -45,5 +47,29 @@
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
     return data;
+  }
+
+  // ---------------------------------------------------------------- render ballot paper
+  // Built with createElement/textContent only - no server data goes through innerHTML (XSS-safe)
+  function makeBox(section, id, title, subtitle) {
+    const box = document.createElement("div"); box.className = "box";
+    const input = document.createElement("input");
+    input.dataset[section] = id; input.maxLength = 2; input.inputMode = "numeric";
+    input.setAttribute("aria-label", title);
+    const name = document.createElement("span"); name.className = "name"; name.textContent = title;
+    const party = document.createElement("span"); party.className = "party"; party.textContent = subtitle;
+    box.append(input, name, party);
+    return box;
+  }
+  function renderBallot() {
+    const atl = $("atl"), btl = $("btl");
+    atl.replaceChildren(); btl.replaceChildren();
+    for (const g of election.groups) {
+      atl.appendChild(makeBox("atl", g.code, `Group ${g.code}`, g.name));
+    }
+    for (const c of election.candidates) {
+      btl.appendChild(makeBox("btl", c.id, `${c.id} · ${c.name}`,
+        c.party + (c.group_code ? ` (Group ${c.group_code})` : " (Ungrouped)")));
+    }
   }
 })();
