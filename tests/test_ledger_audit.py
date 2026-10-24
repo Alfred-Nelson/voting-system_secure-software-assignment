@@ -110,3 +110,25 @@ def test_admin_actions_are_audited_with_identity(h, http, svc):
     h.open_polls()
     entry = next(e for e in svc.audit.entries() if e["action"] == "election.status_changed")
     assert entry["actor"] == "admin1" and '"before": "setup"' in entry["details"]
+
+
+# ---------------------------------------------------------------- GET /api/audit
+def test_audit_endpoint_returns_latest_200_entries(h, http, svc):
+    for i in range(205):
+        svc.audit.record("test.event", "tester", "admin", {"i": i})
+    r = http.get("/api/audit", headers=h.staff("auditor1"))
+    assert r.status_code == 200
+    entries = r.get_json()["entries"]
+    assert len(entries) == 200
+    seqs = [e["seq"] for e in entries]
+    assert seqs == sorted(seqs, reverse=True)                  # newest first
+    assert entries[0]["action"] == "test.event" and '"i": 204' in entries[0]["details"]
+    assert {"seq", "ts", "actor", "role", "action", "details", "entry_hash"} <= set(entries[0])
+
+
+def test_audit_endpoint_is_auditor_only(h, http, svc):
+    assert http.get("/api/audit").status_code == 401
+    for user in ("admin1", "officer1", "delegate_nsw1"):
+        assert http.get("/api/audit", headers=h.staff(user)).status_code == 403
+    assert any(e["action"] == "access.denied" and e["actor"] == "admin1"
+               for e in svc.audit.entries())
