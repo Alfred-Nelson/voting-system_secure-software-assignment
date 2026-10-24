@@ -312,3 +312,24 @@ class ElectionService:
         return {"result": json.loads(row["payload"]), "key_version": row["key_version"],
                 "signature": row["signature"],
                 "public_key_pem": self.keys.public_key_pem("results_sign", row["key_version"])}
+
+    # ------------------------------------------------------------ candidates & dual auth
+    def update_candidate(self, cid, fields, actor, role):
+        with self.dbs.connect("ballot") as conn:
+            before = conn.execute("SELECT * FROM candidates WHERE id = ?", (cid,)).fetchone()
+            if not before:
+                raise VotingError("candidate not found", 404)
+            if self.status() != "setup":
+                raise VotingError("candidate details are frozen once voting opens", 409)
+            name = fields.get("name", before["name"])
+            party = fields.get("party", before["party"])
+            conn.execute("UPDATE candidates SET name = ?, party = ? WHERE id = ?",
+                         (name, party, cid))
+        self.audit.record("candidate.updated", actor, role, {
+            "candidate": cid, "before": {"name": before["name"], "party": before["party"]},
+            "after": {"name": name, "party": party}})
+
+    def candidate_state(self, cid):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT state FROM candidates WHERE id = ?", (cid,)).fetchone()
+        return row["state"] if row else None
