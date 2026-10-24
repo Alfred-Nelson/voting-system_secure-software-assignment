@@ -51,6 +51,15 @@
     <button id="cast-btn" type="button">Encrypt, sign &amp; cast vote</button>
     <button id="clear-btn" class="secondary" type="button">Clear</button>
     <div id="ballot-msg"></div>
+    <h3>What happens when you cast</h3>
+    <ol id="steps" class="steps">
+      <li data-step="check">Formality check against Senate numbering rules (SR-12)</li>
+      <li data-step="cred">Anonymous credential created and blind-signed by the AEC (SR-03, SR-04, SR-07)</li>
+      <li data-step="logout">Signed out - the ballot is sent with no login attached (SR-07)</li>
+      <li data-step="encrypt">Ballot padded to a fixed size and encrypted with AES-256-GCM (SR-05, SR-09)</li>
+      <li data-step="sign">Ballot signed with your credential key, ECDSA P-256 (SR-10)</li>
+      <li data-step="submit">Sent anonymously; receipt returned (SR-11, SR-15)</li>
+    </ol>
   </section>
 
   <!-- Step 3: receipt -->
