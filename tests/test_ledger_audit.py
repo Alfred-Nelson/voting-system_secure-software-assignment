@@ -132,3 +132,33 @@ def test_audit_endpoint_is_auditor_only(h, http, svc):
         assert http.get("/api/audit", headers=h.staff(user)).status_code == 403
     assert any(e["action"] == "access.denied" and e["actor"] == "admin1"
                for e in svc.audit.entries())
+
+
+# ---------------------------------------------------------------- GET /api/audit/verify
+def test_audit_verify_endpoint_intact_chain(h, http, svc):
+    r = http.get("/api/audit/verify", headers=h.staff("auditor1"))
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] and data["first_bad_seq"] is None and data["entries"] > 0
+    assert not any(a["kind"] == "audit.tamper" for a in svc.monitor.alerts())
+
+
+def test_audit_verify_endpoint_names_first_bad_entry_and_alerts(h, http, svc):
+    for i in range(5):
+        svc.audit.record("test.event", "tester", "admin", {"i": i})
+    hdr = h.staff("auditor1")
+    with sqlite3.connect(svc.dbs.paths["audit"]) as c:
+        c.execute("DROP TRIGGER audit_no_update")                 # attacker with database access
+        c.execute("UPDATE audit_log SET details = '{\"i\": 99}' WHERE seq = 3")
+    r = http.get("/api/audit/verify", headers=hdr)
+    assert r.status_code == 200
+    data = r.get_json()
+    assert not data["ok"] and data["first_bad_seq"] == 3 and data["reason"]
+    alert = next(a for a in svc.monitor.alerts() if a["kind"] == "audit.tamper")
+    assert alert["severity"] == "critical" and alert["message"] == data["reason"]
+
+
+def test_audit_verify_endpoint_is_auditor_only(h, http, svc):
+    assert http.get("/api/audit/verify").status_code == 401
+    for user in ("admin1", "officer1", "delegate_nsw1"):
+        assert http.get("/api/audit/verify", headers=h.staff(user)).status_code == 403
