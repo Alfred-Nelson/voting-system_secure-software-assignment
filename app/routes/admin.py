@@ -161,3 +161,9 @@ def ledger_verify():
     if not result["ok"]:
         svc().monitor.alert("critical", "ledger.tamper", "; ".join(result["problems"]))
     return jsonify(result)
+
+
+@bp.get("/audit")
+@require("audit.view")
+def audit_entries():
+    return jsonify(entries=svc().audit.entries())
