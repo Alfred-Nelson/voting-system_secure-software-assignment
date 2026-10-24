@@ -140,4 +140,44 @@
     step("sign");
     return { credential: b64(cred.spki), token: cred.token, envelope, signature: b64(sig) };
   }
+
+  // Reads back the credential stored by obtainCredential() so a re-vote reuses it
+  async function loadWallet() {
+    const raw = walletKey && localStorage.getItem(walletKey);
+    if (!raw) return null;
+    const w = JSON.parse(raw);
+    const key = await crypto.subtle.importKey("jwk", w.jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    return { key, spki: Uint8Array.from(atob(w.spki), c => c.charCodeAt(0)).buffer, token: w.token };
+  }
+
+  // ---------------------------------------------------------------- cast (SR-07/09/15)
+  async function cast() {
+    document.querySelectorAll("#steps li").forEach(li => li.classList.remove("done"));
+    const res = checkBallot();
+    if (!res.formal) return;
+    step("check");
+    $("cast-btn").disabled = true;
+    try {
+      const raw = readBallot(), ballot = { atl: {}, btl: {} };
+      for (const s of ["atl", "btl"]) for (const [k, v] of Object.entries(raw[s])) ballot[s][k] = parseInt(v, 10);
+      let cred = await loadWallet();
+      if (!cred) cred = await obtainCredential();
+      step("cred");
+      if (token) { await api("POST", "/api/auth/logout", null, true).catch(() => {}); token = null; }
+      step("logout");
+      const submission = await buildSubmission(ballot, cred);
+      // Small random delay so submission time does not line up with the login (SR-09)
+      await new Promise(r => setTimeout(r, 300 + Math.random() * 1200));
+      const receipt = await api("POST", "/api/ballots", submission, false);   // NO Authorization header
+      step("submit");
+      $("receipt").textContent = receipt.receipt;
+      $("receipt-panel").classList.remove("hidden");
+      $("ballot-panel").classList.add("hidden");
+      show("ballot-msg", "", "");
+    } catch (err) {
+      show("ballot-msg", "Could not cast vote: " + err.message, "bad");
+    } finally {
+      $("cast-btn").disabled = false;
+    }
+  }
 })();
