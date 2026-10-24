@@ -65,3 +65,22 @@ def test_private_keys_never_exposed(tmp_path):
     public_api = [m for m in dir(km) if not m.startswith("_")]
     assert not any("private" in m for m in public_api)
     assert "PRIVATE" not in km.public_key_pem("results_sign")
+
+
+# ---------------------------------------------------------------- GET /api/admin/keys
+def test_key_status_endpoint(h, http, svc):
+    r = http.get("/api/admin/keys", headers=h.staff("admin1"))
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["keys"] == svc.keys.key_status()
+    assert data["rotation_due"] == svc.keys.needs_rotation() == []
+    assert "material" not in r.get_data(as_text=True)          # never leaks key material
+
+
+def test_key_status_permissions(h, http, svc):
+    assert http.get("/api/admin/keys").status_code == 401
+    assert http.get("/api/admin/keys", headers=h.staff("auditor1")).status_code == 200
+    r = http.get("/api/admin/keys", headers=h.staff("officer1"))
+    assert r.status_code == 403
+    assert any(e["action"] == "access.denied" and e["actor"] == "officer1"
+               for e in svc.audit.entries())
