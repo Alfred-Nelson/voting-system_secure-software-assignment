@@ -30,6 +30,24 @@
     if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
     return data;
   }
+  // Every cell is filled with textContent, never innerHTML, so server data cannot inject markup (XSS).
+  function table(id, rows, cols, extra) {
+    const t = $(id); t.innerHTML = "";
+    const head = document.createElement("tr");
+    for (const c of cols.concat(extra ? [""] : [])) { const th = document.createElement("th"); th.textContent = c; head.appendChild(th); }
+    t.appendChild(head);
+    for (const row of rows) {
+      const tr = document.createElement("tr");
+      for (const c of cols) {
+        const td = document.createElement("td");
+        let v = row[c]; if (typeof v === "object" && v !== null) v = JSON.stringify(v);
+        td.textContent = v === undefined || v === null ? "" : String(v);
+        tr.appendChild(td);
+      }
+      if (extra) { const td = document.createElement("td"); const el = extra(row); if (el) td.appendChild(el); tr.appendChild(td); }
+      t.appendChild(tr);
+    }
+  }
 
   const can = (p) => (PERMS[me.role] || []).includes(p);
 
