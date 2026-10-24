@@ -3,6 +3,14 @@
 "use strict";
 (() => {
   const $ = (id) => document.getElementById(id);
+  // UI-only copy of ROLE_PERMISSIONS (app/security/rbac.py); the server still checks every call.
+  const PERMS = {
+    employee: ["station.mark_voted", "approval.request", "terminal.view", "alerts.view"],
+    delegate: ["candidates.edit", "approval.request", "approval.approve", "alerts.view"],
+    admin: ["election.configure", "tally.run", "results.publish", "keys.rotate", "keys.view",
+      "alerts.view", "alerts.ack", "terminal.view", "backup.run"],
+    auditor: ["audit.view", "audit.verify", "ledger.verify", "alerts.view", "keys.view"],
+  };
   let token = null, me = null;
 
   function msg(el, text, kind) {
