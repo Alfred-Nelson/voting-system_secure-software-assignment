@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Secure E-Voting - Voter</title>
+</head>
+<body>
+<header>
+  <h1>Secure E-Voting Prototype · Senate <span id="hdr-state"></span></h1>
+</header>
+<main>
+  <div class="panel">
+    <span class="muted">Election status:</span> <span id="status" class="badge">…</span>
+    <p class="muted">Prototype for a university assignment. All people, parties and data are fictional.</p>
+  </div>
+
+  <!-- Step 1: login with MFA (SR-01) -->
+  <section id="login-panel" class="panel">
+    <h2>1. Sign in</h2>
+    <p class="muted">You need your enrolment ID, password <strong>and</strong> the 6-digit code from your authenticator app.</p>
+    <form id="login-form" autocomplete="off">
+      <div class="row">
+        <div><label for="enrol">Enrolment ID</label><input id="enrol" required maxlength="20" placeholder="NSW1000001"></div>
+        <div><label for="password">Password</label><input id="password" type="password" required maxlength="128"></div>
+        <div><label for="totp">One-time code</label><input id="totp" inputmode="numeric" pattern="[0-9]{6}" required maxlength="6" placeholder="123456"></div>
+      </div>
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="login-msg"></div>
+  </section>
+
+  <!-- Step 2: ballot -->
+  <section id="ballot-panel" class="panel hidden">
+    <h2>2. Complete your Senate ballot paper</h2>
+    <p class="muted">Vote <strong>either</strong> above the line (number at least 6 parties/groups, from 1)
+      <strong>or</strong> below the line (number at least 6 candidates, from 1). Your ballot is checked,
+      padded, encrypted and signed <em>in this browser</em> before it is sent.</p>
+    <div class="ballot">
+      <div class="ballot-section">
+        <h3>Above the line</h3>
+        <div id="atl" class="ballot-grid"></div>
+      </div>
+      <div class="divider"><span>OR</span></div>
+      <div class="ballot-section">
+        <h3>Below the line</h3>
+        <div id="btl" class="ballot-grid"></div>
+      </div>
+    </div>
+    <button id="check-btn" class="secondary" type="button">Check my ballot</button>
+    <button id="cast-btn" type="button">Encrypt, sign &amp; cast vote</button>
+    <button id="clear-btn" class="secondary" type="button">Clear</button>
+    <div id="ballot-msg"></div>
+  </section>
+
+  <!-- Step 3: receipt -->
+  <section id="receipt-panel" class="panel hidden">
+    <h2>3. Your vote has been recorded</h2>
+    <p>Your receipt code:</p>
+    <p id="receipt" class="receipt mono"></p>
+    <p class="muted">Check this code on the <a href="/board">public bulletin board</a>. It proves your ballot was
+      recorded but does not reveal who you voted for. You may vote again before polls close - only your
+      latest online vote counts (SR-30). Your credential is kept in this browser for that purpose.</p>
+    <button id="revote-btn" class="secondary" type="button">Change my vote</button>
+  </section>
+</main>
+</body>
+</html>
