@@ -63,7 +63,26 @@ class ApprovalService:
             conn.execute("INSERT INTO approvals VALUES (?,?,?)",
                          (request_id, user["username"], time.time()))
             approvals = existing + [user["username"]]
+            ready = len(approvals) >= REQUIRED_APPROVALS
+            if ready:
+                conn.execute("UPDATE approval_requests SET status = 'approved' WHERE id = ?",
+                             (request_id,))
         self.audit.record("dual_auth.approved", user["username"], user["role"],
                           {"request_id": request_id, "approvals": approvals})
+        if ready:
+            return {"status": "executed", "approvals": approvals,
+                    "outcome": self._execute(dict(req), approvals)}
         return {"status": "pending", "approvals": approvals,
                 "needed": REQUIRED_APPROVALS - len(approvals)}
+
+    def _execute(self, req, approvals):
+        if req["action"] == "exclude_candidate":
+            with self.dbs.connect("ballot") as conn:
+                conn.execute("UPDATE candidates SET excluded = 1 WHERE id = ?", (req["target"],))
+            self.audit.record("candidate.excluded", "dual-auth", "system",
+                              {"candidate": req["target"], "approved_by": approvals,
+                               "request_id": req["id"]})
+            return f"candidate {req['target']} excluded"
+        result = self.election.run_tally("dual-auth:" + "+".join(approvals), "system",
+                                         recount=True)
+        return {"recount_elected": result["result"]["elected"]}
