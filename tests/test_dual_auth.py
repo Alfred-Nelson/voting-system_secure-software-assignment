@@ -29,3 +29,9 @@ def test_same_delegate_cannot_approve_twice(h, http):
     http.post(f"/api/admin/approvals/{rid}/approve", headers=hdr)
     r = http.post(f"/api/admin/approvals/{rid}/approve", headers=hdr)
     assert r.status_code == 409
+
+
+def test_requester_cannot_approve_own_request(h, http):
+    rid = _request(http, h, user="delegate_nsw1")
+    r = http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_nsw1"))
+    assert r.status_code == 403
