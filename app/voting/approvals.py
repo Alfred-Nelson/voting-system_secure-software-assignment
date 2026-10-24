@@ -41,3 +41,29 @@ class ApprovalService:
                 r["approvals"] = [a["approver"] for a in conn.execute(
                     "SELECT approver FROM approvals WHERE request_id = ? ORDER BY ts", (r["id"],))]
         return reqs
+
+    def approve(self, request_id, user):
+        with self.dbs.transaction("identity") as conn:
+            req = conn.execute("SELECT * FROM approval_requests WHERE id = ?",
+                               (request_id,)).fetchone()
+            if not req:
+                raise VotingError("request not found", 404)
+            if req["status"] != "pending":
+                raise VotingError(f"request already {req['status']}", 409)
+            if (req["action"] == "exclude_candidate" and user["role"] == "delegate"
+                    and self.election.candidate_state(req["target"]) != user["state"]):
+                raise VotingError("delegates can only approve exclusions in their own "
+                                  "state/territory", 403)
+            if req["requested_by"] == user["username"]:
+                raise VotingError("the requester cannot approve their own request", 403)
+            existing = [r["approver"] for r in conn.execute(
+                "SELECT approver FROM approvals WHERE request_id = ?", (request_id,))]
+            if user["username"] in existing:
+                raise VotingError("you have already approved this request", 409)
+            conn.execute("INSERT INTO approvals VALUES (?,?,?)",
+                         (request_id, user["username"], time.time()))
+            approvals = existing + [user["username"]]
+        self.audit.record("dual_auth.approved", user["username"], user["role"],
+                          {"request_id": request_id, "approvals": approvals})
+        return {"status": "pending", "approvals": approvals,
+                "needed": REQUIRED_APPROVALS - len(approvals)}
