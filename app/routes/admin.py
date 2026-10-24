@@ -2,6 +2,7 @@
 MFA session (SR-02); every state change is audited (SR-18)."""
 from flask import Blueprint, g, jsonify
 
+from ..security.crypto import CryptoError
 from ..security.rbac import enforce_state_scope, require
 from ..security.crypto import CryptoError
 from ..voting.service import VotingError
@@ -137,6 +138,20 @@ def run_tally():
         return jsonify(svc().election.run_tally(*_actor()))
     except VotingError as exc:
         return _err(exc)
+
+
+# ---------------------------------------------------------------- keys (SR-26)
+@bp.post("/admin/keys/rotate")
+@require("keys.rotate")
+def rotate_key():
+    d = body()
+    try:
+        version = svc().keys.rotate(str(d.get("purpose", "")), g.user["username"],
+                                    str(d.get("reason", "manual")))
+        svc().monitor.alert("info", "keys.rotated", f"{d.get('purpose')} rotated to v{version}")
+        return jsonify(purpose=d.get("purpose"), version=version)
+    except (CryptoError, KeyError) as exc:
+        return jsonify(error=str(exc)), 400
 
 
 # ---------------------------------------------------------------- auditor (SR-11, SR-19)
