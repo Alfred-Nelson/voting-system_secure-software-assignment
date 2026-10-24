@@ -11,6 +11,11 @@ def test_permission_matrix_separation_of_duties():
     assert all(p for p in ROLE_PERMISSIONS.values())
 
 
+def test_unauthenticated_requests_rejected(http):
+    assert http.get("/api/audit").status_code == 401
+    assert http.post("/api/admin/tally").status_code == 401
+
+
 def test_delegate_limited_to_own_state_with_alert(h, http, svc):
     hdr = h.staff("delegate_nsw1")
     assert http.put("/api/admin/candidates/A1", json={"name": "Mia T."}, headers=hdr).status_code == 200
