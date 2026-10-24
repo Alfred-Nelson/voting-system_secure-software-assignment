@@ -41,3 +41,9 @@ def test_employee_cannot_approve(h, http):
     rid = _request(http, h)
     assert http.post(f"/api/admin/approvals/{rid}/approve",
                      headers=h.staff("officer1")).status_code == 403
+
+
+def test_other_state_delegate_cannot_approve_exclusion(h, http):
+    rid = _request(http, h)
+    r = http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_vic1"))
+    assert r.status_code == 403
