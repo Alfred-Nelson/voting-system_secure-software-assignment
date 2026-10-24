@@ -1,4 +1,6 @@
 """SR-16 role-based access control and least privilege."""
+import pytest
+
 from app.security.rbac import ROLE_PERMISSIONS, has_permission
 
 
@@ -14,6 +16,18 @@ def test_permission_matrix_separation_of_duties():
 def test_unauthenticated_requests_rejected(http):
     assert http.get("/api/audit").status_code == 401
     assert http.post("/api/admin/tally").status_code == 401
+
+
+@pytest.mark.parametrize("user,method,path", [
+    ("admin1", "get", "/api/audit"),
+    ("auditor1", "post", "/api/admin/tally"),
+    ("officer1", "post", "/api/admin/keys/rotate"),
+    ("delegate_nsw1", "post", "/api/admin/election/status"),
+])
+def test_forbidden_actions_denied_and_audited(h, http, svc, user, method, path):
+    r = getattr(http, method)(path, headers=h.staff(user), json={})
+    assert r.status_code == 403
+    assert any(e["action"] == "access.denied" and e["actor"] == user for e in svc.audit.entries())
 
 
 def test_delegate_limited_to_own_state_with_alert(h, http, svc):
