@@ -1,4 +1,9 @@
 """Election status rules and general hardening (results, backup and monitoring tests are added in later issues)."""
+import base64
+import json
+
+import pytest
+from cryptography.hazmat.primitives import serialization
 
 
 # ---------------------------------------------------------------- SR-14
@@ -14,6 +19,18 @@ def test_results_require_client_key(h, http, creds):
     _publish(h, http)
     assert http.get("/api/results").status_code == 401
     assert http.get("/api/results", headers={"X-API-Key": "wrong"}).status_code == 401
+
+
+def test_results_signature_verifies_and_detects_change(h, http, creds):
+    _publish(h, http)
+    data = http.get("/api/results", headers={"X-API-Key": creds["results_api_key"]}).get_json()
+    pub = serialization.load_pem_public_key(data["public_key_pem"].encode())
+    payload = json.dumps(data["result"], sort_keys=True, separators=(",", ":")).encode()
+    pub.verify(base64.b64decode(data["signature"]), payload)
+    data["result"]["elected"] = ["A1"]
+    tampered = json.dumps(data["result"], sort_keys=True, separators=(",", ":")).encode()
+    with pytest.raises(Exception):
+        pub.verify(base64.b64decode(data["signature"]), tampered)
 
 
 def test_cannot_count_while_polls_open(h, http):
