@@ -31,6 +31,94 @@
       <span class="muted">role</span> <span id="role" class="badge"></span> ·
       <span class="muted">session ends after <strong id="idle"></strong>s idle</span>
       <button id="logout-btn" class="secondary" type="button">Sign out</button>
+      <div class="tabs" id="tabs"></div>
+    </div>
+
+    <div class="panel tab" data-tab="election" data-perm="election.configure">
+      <h2>Election control</h2>
+      <p>Status: <span id="el-status" class="badge"></span></p>
+      <button data-status="open" type="button">Open polls</button>
+      <button data-status="closed" type="button">Close polls</button>
+      <button id="tally-btn" type="button">Verify ledger &amp; run count (SR-11, SR-13)</button>
+      <div id="election-msg"></div>
+      <pre id="tally-out" class="hidden"></pre>
+    </div>
+
+    <div class="panel tab" data-tab="keys" data-perm="keys.view">
+      <h2>Key management (SR-26)</h2>
+      <div class="table-wrap"><table id="keys-table"></table></div>
+      <div class="admin-only">
+        <label for="rotate-purpose">Rotate key</label>
+        <select id="rotate-purpose"><option>results_sign</option><option>receipt_sign</option>
+          <option>audit_hmac</option><option>backup</option><option>blind</option></select>
+        <button id="rotate-btn" type="button">Rotate now</button>
+      </div>
+      <div id="keys-msg"></div>
+    </div>
+
+    <div class="panel tab" data-tab="alerts" data-perm="alerts.view">
+      <h2>Security alerts (SR-20)</h2>
+      <button id="alerts-refresh" class="secondary" type="button">Refresh</button>
+      <div class="table-wrap"><table id="alerts-table"></table></div>
+    </div>
+
+    <div class="panel tab" data-tab="terminals" data-perm="terminal.view">
+      <h2>Polling terminals (SR-20, SR-22)</h2>
+      <p class="muted">Terminals that miss heartbeats for 60 s are marked offline and raise a critical alert to start the paper-ballot procedure.</p>
+      <button id="terminals-refresh" class="secondary" type="button">Refresh</button>
+      <div class="table-wrap"><table id="terminals-table"></table></div>
+    </div>
+
+    <div class="panel tab" data-tab="candidates" data-perm="candidates.edit">
+      <h2>Candidate data (SR-16 - own state only)</h2>
+      <div class="row">
+        <div><label for="cand-id">Candidate ID</label><input id="cand-id" placeholder="A1 or V1"></div>
+        <div><label for="cand-name">New name</label><input id="cand-name" maxlength="120"></div>
+        <div><label for="cand-party">New party</label><input id="cand-party" maxlength="120"></div>
+      </div>
+      <button id="cand-btn" type="button">Update candidate</button>
+      <div id="cand-msg"></div>
+    </div>
+
+    <div class="panel tab" data-tab="approvals" data-perm="approval.request">
+      <h2>Dual authorisation (SR-17)</h2>
+      <p class="muted">Candidate exclusions and recounts need approval from two different delegates (not the requester).</p>
+      <div class="row">
+        <div><label for="ap-action">Action</label>
+          <select id="ap-action"><option value="exclude_candidate">Exclude candidate</option><option value="recount">Recount</option></select></div>
+        <div><label for="ap-target">Target (candidate ID)</label><input id="ap-target" placeholder="U1"></div>
+        <div><label for="ap-reason">Reason</label><input id="ap-reason" maxlength="200"></div>
+      </div>
+      <button id="ap-btn" type="button">Create request</button>
+      <button id="ap-refresh" class="secondary" type="button">Refresh</button>
+      <div id="ap-msg"></div>
+      <div class="table-wrap"><table id="ap-table"></table></div>
+    </div>
+
+    <div class="panel tab" data-tab="station" data-perm="station.mark_voted">
+      <h2>Polling-station / postal vote (SR-04)</h2>
+      <div class="row">
+        <div><label for="st-enrol">Enrolment ID</label><input id="st-enrol" maxlength="20"></div>
+        <div><label for="st-channel">Channel</label>
+          <select id="st-channel"><option value="station">Polling station</option><option value="postal">Postal</option></select></div>
+      </div>
+      <button id="st-btn" type="button">Mark as voted</button>
+      <div id="st-msg"></div>
+    </div>
+
+    <div class="panel tab" data-tab="audit" data-perm="audit.view">
+      <h2>Audit log (SR-18, SR-19)</h2>
+      <button id="audit-verify" type="button">Verify audit hash chain</button>
+      <button id="ledger-verify" type="button">Verify ballot ledger</button>
+      <button id="audit-refresh" class="secondary" type="button">Refresh</button>
+      <div id="audit-msg"></div>
+      <div class="table-wrap"><table id="audit-table"></table></div>
+    </div>
+
+    <div class="panel tab" data-tab="backup" data-perm="backup.run">
+      <h2>Backup (SR-23)</h2>
+      <button id="backup-btn" type="button">Create encrypted backup</button>
+      <div id="backup-msg"></div>
     </div>
   </section>
 </main>
