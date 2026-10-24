@@ -35,3 +35,9 @@ def test_requester_cannot_approve_own_request(h, http):
     rid = _request(http, h, user="delegate_nsw1")
     r = http.post(f"/api/admin/approvals/{rid}/approve", headers=h.staff("delegate_nsw1"))
     assert r.status_code == 403
+
+
+def test_employee_cannot_approve(h, http):
+    rid = _request(http, h)
+    assert http.post(f"/api/admin/approvals/{rid}/approve",
+                     headers=h.staff("officer1")).status_code == 403
