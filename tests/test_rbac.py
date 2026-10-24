@@ -30,6 +30,12 @@ def test_forbidden_actions_denied_and_audited(h, http, svc, user, method, path):
     assert any(e["action"] == "access.denied" and e["actor"] == user for e in svc.audit.entries())
 
 
+def test_voter_cannot_use_staff_endpoints(h, http):
+    v = h.voter("NSW1000001")
+    r = http.get("/api/admin/alerts", headers={"Authorization": "Bearer " + v.token})
+    assert r.status_code == 403
+
+
 def test_delegate_limited_to_own_state_with_alert(h, http, svc):
     hdr = h.staff("delegate_nsw1")
     assert http.put("/api/admin/candidates/A1", json={"name": "Mia T."}, headers=hdr).status_code == 200

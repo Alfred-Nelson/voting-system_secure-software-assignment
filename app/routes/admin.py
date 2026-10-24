@@ -154,6 +154,13 @@ def rotate_key():
         return jsonify(error=str(exc)), 400
 
 
+# ---------------------------------------------------------------- monitoring (SR-20)
+@bp.get("/admin/alerts")
+@require("alerts.view")
+def alerts():
+    return jsonify(alerts=svc().monitor.alerts())
+
+
 # ---------------------------------------------------------------- auditor (SR-11, SR-19)
 @bp.get("/audit")
 @require("audit.view")
