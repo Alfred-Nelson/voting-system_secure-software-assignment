@@ -4,12 +4,21 @@
     python run.py --tls      # https://127.0.0.1:5443 TLS 1.3 ONLY (SR-05)
 """
 import argparse
+import logging
 import ssl
 from pathlib import Path
 
 from app import create_app
 
 BASE = Path(__file__).resolve().parent
+
+
+class DropBallotAccessLogs(logging.Filter):
+    """SR-07 / SR-09: the web server's access log would otherwise record the client
+    IP and exact time of every ballot submission. Those lines are never written."""
+
+    def filter(self, record):
+        return "/api/ballots" not in record.getMessage()
 
 
 def main():
@@ -19,6 +28,7 @@ def main():
     ap.add_argument("--port", type=int)
     args = ap.parse_args()
 
+    logging.getLogger("werkzeug").addFilter(DropBallotAccessLogs())
     app = create_app()
 
     ssl_ctx = None
