@@ -98,3 +98,12 @@ def test_modified_code_refuses_to_run(tmp_path):
     (app_dir / "main.py").write_text("print('vote')")
     (app_dir / "backdoor.py").write_text("x = 1")
     assert not verify_release(app_dir, tmp_path / "manifest.json", tmp_path / "pub.pem")[0]
+
+
+def test_forged_manifest_rejected(tmp_path):
+    app_dir = _signed_release(tmp_path)
+    m = json.loads((tmp_path / "manifest.json").read_text())
+    m["manifest"]["files"]["main.py"] = "0" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps(m))
+    ok, reason = verify_release(app_dir, tmp_path / "manifest.json", tmp_path / "pub.pem")
+    assert not ok and "signature" in reason
