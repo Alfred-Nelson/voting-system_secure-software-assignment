@@ -5,6 +5,9 @@ import json
 import pytest
 from cryptography.hazmat.primitives import serialization
 
+from app.security.backup import create_backup, restore_backup
+from app.security.crypto import CryptoError
+
 
 # ---------------------------------------------------------------- SR-14
 def _publish(h, http):
@@ -44,6 +47,24 @@ def test_cannot_count_while_polls_open(h, http):
     h.open_polls()
     r = http.post("/api/admin/tally", headers=h.staff("admin1"))
     assert r.status_code == 409
+
+
+# ---------------------------------------------------------------- SR-23
+def test_backup_restore_roundtrip(svc, creds, tmp_path):
+    path = create_backup(svc.dbs, svc.keys, tmp_path / "bk")
+    assert b"SQLite" not in path.read_bytes()                     # encrypted
+    files = restore_backup(svc.keys, path, tmp_path / "restore")
+    assert sorted(files) == ["audit.db", "ballot.db", "identity.db"]
+    assert (tmp_path / "restore" / "identity.db").stat().st_size > 0
+
+
+def test_tampered_backup_rejected(svc, creds, tmp_path):
+    path = create_backup(svc.dbs, svc.keys, tmp_path / "bk")
+    data = bytearray(path.read_bytes())
+    data[-1] ^= 1
+    path.write_bytes(bytes(data))
+    with pytest.raises(CryptoError):
+        restore_backup(svc.keys, path, tmp_path / "restore")
 
 
 # ---------------------------------------------------------------- hardening
