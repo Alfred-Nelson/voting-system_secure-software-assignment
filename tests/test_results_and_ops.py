@@ -4,6 +4,9 @@ import json
 
 import pytest
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from app.security.integrity import build_manifest, manifest_bytes, verify_release
 
 
 # ---------------------------------------------------------------- SR-14
@@ -66,3 +69,22 @@ def test_election_status_transitions_enforced(h, http):
     assert r.status_code == 400                       # can't close before opening
     r = http.post("/api/admin/election/status", json={"status": "tallied"}, headers=adm)
     assert r.status_code == 400                       # only the count may set 'tallied'
+
+
+# ---------------------------------------------------------------- SR-25
+def _signed_release(tmp_path):
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / "main.py").write_text("print('vote')")
+    key = ed25519.Ed25519PrivateKey.generate()
+    manifest = build_manifest(app_dir)
+    (tmp_path / "manifest.json").write_text(json.dumps({
+        "manifest": manifest, "signature": base64.b64encode(key.sign(manifest_bytes(manifest))).decode()}))
+    (tmp_path / "pub.pem").write_bytes(key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
+    return app_dir
+
+
+def test_signed_build_verifies(tmp_path):
+    app_dir = _signed_release(tmp_path)
+    assert verify_release(app_dir, tmp_path / "manifest.json", tmp_path / "pub.pem")[0]
