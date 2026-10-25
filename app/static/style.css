@@ -16,6 +16,10 @@ body { margin: 0; background: var(--bg); color: var(--ink);
 header { background: var(--accent); color: var(--accent-ink); padding: 14px 20px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 header h1 { margin: 0; font-size: 1.15rem; letter-spacing: .02em; }
+header nav { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+header nav a { color: #fff; text-decoration: none; font-weight: 600; padding: 2px 0; }
+header nav a:hover, header nav a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+@media (prefers-color-scheme: dark) { header nav a { color: var(--accent-ink); } }  /* header is light in dark mode */
 main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 20px; margin-bottom: 18px; }
