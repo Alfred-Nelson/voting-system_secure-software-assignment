@@ -1,7 +1,7 @@
 """Start the prototype server.
 
-    python run.py            # http://127.0.0.1:5000  (development)
-    python run.py --tls      # https://127.0.0.1:5443 TLS 1.3 ONLY (SR-05)
+    python run.py            # http://127.0.0.1:3776  (development)
+    python run.py --tls      # https://127.0.0.1:3775 TLS 1.3 ONLY (SR-05)
 """
 import argparse
 import logging
@@ -50,7 +50,7 @@ def main():
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3   # refuse TLS 1.2 and below
         ssl_ctx.load_cert_chain(cert, key)
-    port = args.port or (5443 if args.tls else 5000)
+    port = args.port or (3775 if args.tls else 3776)
     print(f"Serving on {'https' if ssl_ctx else 'http'}://{args.host}:{port}")
     app.run(host=args.host, port=port, ssl_context=ssl_ctx, debug=False, threaded=True)
 

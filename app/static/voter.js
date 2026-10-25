@@ -146,8 +146,16 @@
     const raw = walletKey && localStorage.getItem(walletKey);
     if (!raw) return null;
     const w = JSON.parse(raw);
+    const spki = Uint8Array.from(atob(w.spki), c => c.charCodeAt(0)).buffer;
+    // A credential signed by an old AEC key (e.g. after a system reset) is useless: discard it
+    const n = BigInt("0x" + election.keys.blind_n), e = BigInt("0x" + election.keys.blind_e);
+    const m = BigInt("0x" + hex(await sha256(spki))) % n;
+    if (modPow(BigInt("0x" + w.token), e, n) !== m) {
+      localStorage.removeItem(walletKey);
+      return null;
+    }
     const key = await crypto.subtle.importKey("jwk", w.jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
-    return { key, spki: Uint8Array.from(atob(w.spki), c => c.charCodeAt(0)).buffer, token: w.token };
+    return { key, spki, token: w.token };
   }
 
   // ---------------------------------------------------------------- cast (SR-07/09/15)
@@ -160,6 +168,7 @@
     try {
       const raw = readBallot(), ballot = { atl: {}, btl: {} };
       for (const s of ["atl", "btl"]) for (const [k, v] of Object.entries(raw[s])) ballot[s][k] = parseInt(v, 10);
+      await refreshElection();
       let cred = await loadWallet();
       if (!cred) cred = await obtainCredential();
       step("cred");
@@ -190,6 +199,8 @@
       const r = await api("POST", "/api/auth/voter/login",
         { enrolment_id: enrol, password: $("password").value, totp: $("totp").value.trim() });
       token = r.token;
+      await refreshElection();
+      renderBallot();
       walletKey = "evote-credential-" + hex(await sha256(enc.encode(enrol))).slice(0, 16);
       $("password").value = ""; $("totp").value = "";
       $("login-panel").classList.add("hidden");
@@ -200,11 +211,16 @@
     }
   }
 
-  async function init() {
+  // Keys and status can change if the server was reset/restarted while this page stayed open
+  async function refreshElection() {
     election = await api("GET", "/api/election");
     $("status").textContent = election.status;
     $("status").className = "badge " + election.status;
     $("hdr-state").textContent = election.state;
+  }
+
+  async function init() {
+    await refreshElection();
     renderBallot();
     $("login-form").addEventListener("submit", login);
     $("check-btn").addEventListener("click", checkBallot);
