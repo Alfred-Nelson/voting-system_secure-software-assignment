@@ -82,7 +82,9 @@ class ApprovalService:
             self.audit.record("candidate.excluded", "dual-auth", "system",
                               {"candidate": req["target"], "approved_by": approvals,
                                "request_id": req["id"]})
-            return f"candidate {req['target']} excluded"
+            return f"candidate {self.election.candidate_label(req['target'])} excluded"
         result = self.election.run_tally("dual-auth:" + "+".join(approvals), "system",
                                          recount=True)
-        return {"recount_elected": result["result"]["elected"]}
+        elected = result["result"]["elected"]
+        return {"recount_elected": elected,
+                "recount_elected_names": [self.election.candidate_label(c) for c in elected]}
