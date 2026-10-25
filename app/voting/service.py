@@ -292,7 +292,9 @@ class ElectionService:
                 informal += 1
 
         result = tally.count(orders, all_ids, self.cfg.VACANCIES, excluded)
-        result.update({"informal_ballots": informal, "undecryptable_ballots": undecryptable,
+        result.update({"candidates": {c["id"]: {"name": c["name"], "party": c["party"]}
+                                      for c in cands},
+                       "informal_ballots": informal, "undecryptable_ballots": undecryptable,
                        "state": self.cfg.ELECTION_STATE, "ledger_head": self.ledger.head()["head"],
                        "recount": recount,
                        "counted_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
@@ -328,6 +330,12 @@ class ElectionService:
         self.audit.record("candidate.updated", actor, role, {
             "candidate": cid, "before": {"name": before["name"], "party": before["party"]},
             "after": {"name": name, "party": party}})
+
+    def candidate_label(self, cid):
+        with self.dbs.connect("ballot") as conn:
+            row = conn.execute("SELECT name, party FROM candidates WHERE id = ?",
+                               (cid,)).fetchone()
+        return f"{row['name']} ({row['party']})" if row else cid
 
     def candidate_state(self, cid):
         with self.dbs.connect("ballot") as conn:

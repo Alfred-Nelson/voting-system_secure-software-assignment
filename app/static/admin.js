@@ -118,7 +118,8 @@
     try {
       const r = await api("POST", "/api/admin/tally");
       const res = r.result;
-      msg("election-msg", `Ledger verified. Elected: ${res.elected.join(", ")} · formal ${res.formal_ballots}, informal ${res.informal_ballots} · quota ${res.quota}\nResult signed with results_sign v${r.key_version}.`, "ok");
+      const label = id => res.candidates && res.candidates[id] ? `${res.candidates[id].name} (${res.candidates[id].party})` : id;
+      msg("election-msg", `Ledger verified. Elected: ${res.elected.map(label).join(", ")} · formal ${res.formal_ballots}, informal ${res.informal_ballots} · quota ${res.quota}\nResult signed with results_sign v${r.key_version}.`, "ok");
       $("tally-out").textContent = JSON.stringify(r, null, 2); $("tally-out").classList.remove("hidden");
     } catch (err) { msg("election-msg", err.message, "bad"); }
     loaders.election();
