@@ -2,6 +2,7 @@
 MFA session (SR-02); every state change is audited (SR-18)."""
 from flask import Blueprint, g, jsonify
 
+from ..security.backup import create_backup
 from ..security.crypto import CryptoError
 from ..security.rbac import enforce_state_scope, require
 from ..voting.service import VotingError
@@ -117,6 +118,15 @@ def terminals():
     with svc().dbs.connect("identity") as conn:
         rows = [dict(r) for r in conn.execute("SELECT * FROM terminals ORDER BY id")]
     return jsonify(terminals=rows)
+
+
+# ---------------------------------------------------------------- backup (SR-23)
+@bp.post("/admin/backup")
+@require("backup.run")
+def backup():
+    path = create_backup(svc().dbs, svc().keys, svc().dbs.data_dir / "backups")
+    svc().audit.record("backup.created", g.user["username"], g.user["role"], {"file": path.name})
+    return jsonify(file=path.name)
 
 
 # ---------------------------------------------------------------- polling station (SR-04)
