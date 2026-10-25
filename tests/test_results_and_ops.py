@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import serialization
 
 from app.security.backup import create_backup, restore_backup
 from app.security.crypto import CryptoError
+from client.voter_client import FlaskTransport, VoterClient
 
 
 # ---------------------------------------------------------------- SR-14
@@ -79,6 +80,39 @@ def test_offline_terminal_raises_alert(svc, creds, http):
 
 def test_unknown_terminal_rejected(http, creds):
     assert http.post("/api/terminals/heartbeat", json={"terminal_id": "FAKE"}).status_code == 404
+
+
+# ---------------------------------------------------------------- SR-24
+def test_mission_terminal_network_restriction(http, creds):
+    hdr = {"X-Terminal-Id": "MISSION-LON-01"}
+    inside = http.post("/api/terminals/heartbeat", json={"terminal_id": "MISSION-LON-01"},
+                       headers=hdr, environ_base={"REMOTE_ADDR": "10.20.1.5"})
+    outside = http.post("/api/terminals/heartbeat", json={"terminal_id": "MISSION-LON-01"},
+                        headers=hdr, environ_base={"REMOTE_ADDR": "203.0.113.9"})
+    assert inside.status_code == 200 and outside.status_code == 403
+
+
+class FlakyTransport(FlaskTransport):
+    """Simulates the mission's link dropping for ballot submissions."""
+    offline = True
+
+    def request(self, method, path, json_body=None, headers=None):
+        if self.offline and path == "/api/ballots":
+            raise ConnectionError("link down")
+        return super().request(method, path, json_body, headers)
+
+
+def test_mission_offline_queue_delivers_intact(h, http, tmp_path, svc):
+    h.open_polls()
+    t = FlakyTransport(http, remote_addr="10.20.1.5")
+    v = VoterClient(t, queue_path=tmp_path / "queue.json", terminal_id="MISSION-LON-01")
+    v.login("NSW1000005", h.creds["voter_password"], h.code("NSW1000005"))
+    assert v.cast({"atl": {"C": 1}}) == {"queued": True}
+    assert "atl" not in (tmp_path / "queue.json").read_text()      # queued ballot is encrypted
+    t.offline = False                                              # link restored (e.g. after 4 h)
+    receipts = v.flush_queue()
+    assert len(receipts) == 1 and receipts[0]["receipt"]
+    assert svc.ledger.verify()["ok"]
 
 
 # ---------------------------------------------------------------- hardening
