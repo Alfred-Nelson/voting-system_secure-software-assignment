@@ -1,10 +1,11 @@
-"""Results API (SR-14)."""
+"""Public pages, results API (SR-14) and terminal heartbeats (SR-20/22)."""
 import hashlib
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
 from ..security.ratelimit import limit
-from . import svc
+from .ballots import mission_network_ok
+from . import body, svc
 
 bp = Blueprint("public", __name__)
 
@@ -37,6 +38,21 @@ def results():
         return jsonify(error="no results published yet"), 404
     svc().audit.record("results.served", client, "api_client", {})
     return jsonify(latest)
+
+
+@bp.post("/api/terminals/heartbeat")
+def heartbeat():
+    if not mission_network_ok():
+        return jsonify(error="terminal not on registered mission network"), 403
+    tid = str(body().get("terminal_id", ""))
+    if not svc().monitor.heartbeat(tid):
+        return jsonify(error="unknown terminal"), 404
+    return jsonify(ok=True)
+
+
+@bp.get("/health")
+def health():
+    return jsonify(status="ok", election=svc().election.status())
 
 
 @bp.get("/")
