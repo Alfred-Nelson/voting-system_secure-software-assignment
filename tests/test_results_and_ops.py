@@ -1,6 +1,7 @@
 """Election status rules and general hardening (results, backup and monitoring tests are added in later issues)."""
 import base64
 import json
+import time
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -65,6 +66,19 @@ def test_tampered_backup_rejected(svc, creds, tmp_path):
     path.write_bytes(bytes(data))
     with pytest.raises(CryptoError):
         restore_backup(svc.keys, path, tmp_path / "restore")
+
+
+# ---------------------------------------------------------------- SR-20 / SR-22
+def test_offline_terminal_raises_alert(svc, creds, http):
+    assert http.post("/api/terminals/heartbeat", json={"terminal_id": "PS-SYD-001"}).status_code == 200
+    assert svc.monitor.check_terminals(now=time.time() + 30) == []
+    assert svc.monitor.check_terminals(now=time.time() + 61) == ["PS-SYD-001"]
+    alert = svc.monitor.alerts()[0]
+    assert alert["severity"] == "critical" and "paper-ballot" in alert["message"]
+
+
+def test_unknown_terminal_rejected(http, creds):
+    assert http.post("/api/terminals/heartbeat", json={"terminal_id": "FAKE"}).status_code == 404
 
 
 # ---------------------------------------------------------------- hardening
