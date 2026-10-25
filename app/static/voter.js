@@ -199,4 +199,23 @@
       show("login-msg", err.message, "bad");
     }
   }
+
+  async function init() {
+    election = await api("GET", "/api/election");
+    $("status").textContent = election.status;
+    $("status").className = "badge " + election.status;
+    $("hdr-state").textContent = election.state;
+    renderBallot();
+    $("login-form").addEventListener("submit", login);
+    $("check-btn").addEventListener("click", checkBallot);
+    $("cast-btn").addEventListener("click", cast);
+    $("clear-btn").addEventListener("click", () => { renderBallot(); show("ballot-msg", "", ""); });
+    $("revote-btn").addEventListener("click", () => {
+      renderBallot();
+      $("receipt-panel").classList.add("hidden");
+      $("ballot-panel").classList.remove("hidden");
+      document.querySelectorAll("#steps li").forEach(li => li.classList.remove("done"));
+    });
+  }
+  init().catch(err => show("login-msg", "Could not load election: " + err.message, "bad"));
 })();
