@@ -128,15 +128,42 @@ class VoterClient:
                 "signature": base64.b64encode(sig).decode()}
 
     def cast(self, ballot):
-        """Returns the receipt."""
+        """Returns the receipt, or {'queued': True} when offline (SR-24)."""
         if not self.credential:
             self.obtain_credential()
-        return self._submit(self.build_submission(ballot))
+        submission = self.build_submission(ballot)
+        try:
+            return self._submit(submission)
+        except ConnectionError:
+            if not self.queue_path:
+                raise
+            self._enqueue(submission)
+            return {"queued": True}
 
     def _submit(self, submission):
         headers = {"X-Terminal-Id": self.terminal_id} if self.terminal_id else {}
         s, d = self.t.request("POST", "/api/ballots", submission, headers)  # NO auth header
         return self._check(s, d)
+
+    # ---- offline queue (SR-24). Ballots are already encrypted and signed.
+    def _enqueue(self, submission):
+        items = json.loads(self.queue_path.read_text()) if self.queue_path.exists() else []
+        items.append(submission)
+        self.queue_path.write_text(json.dumps(items))
+        os.chmod(self.queue_path, 0o600)
+
+    def flush_queue(self):
+        if not self.queue_path or not self.queue_path.exists():
+            return []
+        items = json.loads(self.queue_path.read_text())
+        receipts, remaining = [], []
+        for sub in items:
+            try:
+                receipts.append(self._submit(sub))
+            except ConnectionError:
+                remaining.append(sub)
+        self.queue_path.write_text(json.dumps(remaining))
+        return receipts
 
     def verify_receipt(self, code):
         s, d = self.t.request("GET", f"/api/bulletin/{code}")
